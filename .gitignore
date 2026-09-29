@@ -1,6 +1,9 @@
 # local agent instructions — kept out of version control
 CLAUDE.md
 
+# decision records for local agent sessions — kept out of version control
+docs/adr/
+
 # local build tree
 /build/
 
