@@ -41,12 +41,19 @@ endif()
 # Derived here rather than passed in on purpose: if the hub's bin/lib layout
 # changes shape, this test is supposed to be the thing that notices.
 if(NOT PKG_ARCH)
-    string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" _cpu)
+    # Same trap as the hub's own resolver: the VS generator reports the host
+    # processor here, so the platform asked for with -A wins when there is one.
+    if(CMAKE_GENERATOR_PLATFORM)
+        set(_processor "${CMAKE_GENERATOR_PLATFORM}")
+    else()
+        set(_processor "${CMAKE_SYSTEM_PROCESSOR}")
+    endif()
+    string(TOLOWER "${_processor}" _cpu)
     if(_cpu MATCHES "^(amd64|x86_64|x64)$")
         set(PKG_ARCH x64)
     elseif(_cpu MATCHES "^(arm64|aarch64)$")
         set(PKG_ARCH arm64)
-    elseif(_cpu MATCHES "^(x86|i[3-6]86)$")
+    elseif(_cpu MATCHES "^(win32|x86|i[3-6]86)$")
         set(PKG_ARCH x86)
     else()
         set(PKG_ARCH "${_cpu}")

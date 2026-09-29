@@ -38,13 +38,23 @@ function(pkg_include_root out_var member root)
 endfunction()
 
 # Normalise the architecture into the name used inside bin/lib/.
+#
+# The Visual Studio generator does not put the *target* architecture in
+# CMAKE_SYSTEM_PROCESSOR — that variable carries the host's processor, which is how
+# a Win32 configure ends up staged under x64. The platform asked for on the command
+# line (CMAKE_GENERATOR_PLATFORM, i.e. -A Win32) is the truth; generators without
+# that notion (Ninja) fall through to the processor.
 function(pkg_resolve_arch)
-    string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" _cpu)
+    set(_platform "${CMAKE_GENERATOR_PLATFORM}")
+    if(NOT _platform)
+        set(_platform "${CMAKE_SYSTEM_PROCESSOR}")
+    endif()
+    string(TOLOWER "${_platform}" _cpu)
     if(_cpu MATCHES "^(amd64|x86_64|x64)$")
         set(_arch x64)
     elseif(_cpu MATCHES "^(arm64|aarch64)$")
         set(_arch arm64)
-    elseif(_cpu MATCHES "^(x86|i[3-6]86)$")
+    elseif(_cpu MATCHES "^(win32|x86|i[3-6]86)$")
         set(_arch x86)
     else()
         set(_arch "${_cpu}")
