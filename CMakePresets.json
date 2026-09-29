@@ -7,12 +7,25 @@
   },
   "configurePresets": [
     {
-      "name": "ci",
-      "displayName": "CI (Visual Studio 17 2022, x64)",
+      "name": "ci-x64",
+      "displayName": "CI x64 (Visual Studio 17 2022)",
       "description": "The only supported way to configure the hub — see docs/adr/0002",
       "generator": "Visual Studio 17 2022",
       "architecture": "x64",
-      "binaryDir": "${sourceDir}/build/ci",
+      "binaryDir": "${sourceDir}/build/ci-x64",
+      "cacheVariables": {
+        "BUILD_SHARED_LIBS": "OFF",
+        "BUILD_STATIC_LIBS": "ON",
+        "BUILD_TESTING": "OFF"
+      }
+    },
+    {
+      "name": "ci-x86",
+      "displayName": "CI x86 (Visual Studio 17 2022, Win32)",
+      "description": "The same hub in its 32-bit column: bin/lib/<member>/x86/<config>/",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "Win32",
+      "binaryDir": "${sourceDir}/build/ci-x86",
       "cacheVariables": {
         "BUILD_SHARED_LIBS": "OFF",
         "BUILD_STATIC_LIBS": "ON",
@@ -22,13 +35,23 @@
   ],
   "buildPresets": [
     {
-      "name": "Debug",
-      "configurePreset": "ci",
+      "name": "x64-Debug",
+      "configurePreset": "ci-x64",
       "configuration": "Debug"
     },
     {
-      "name": "Release",
-      "configurePreset": "ci",
+      "name": "x64-Release",
+      "configurePreset": "ci-x64",
+      "configuration": "Release"
+    },
+    {
+      "name": "x86-Debug",
+      "configurePreset": "ci-x86",
+      "configuration": "Debug"
+    },
+    {
+      "name": "x86-Release",
+      "configurePreset": "ci-x86",
       "configuration": "Release"
     }
   ]

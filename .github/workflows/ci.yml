@@ -4,6 +4,12 @@ name: ci
 # developer machine. Every branch whose content is meant to be trusted builds
 # here — the experiment branch while it is being proven, main once it lands, and
 # every pull request aimed at main.
+#
+# Three jobs on purpose. `hub` builds one (arch, config) column; `publish` folds
+# the columns into the single artifact the layout promises; `consume` builds
+# nothing at all, downloads that artifact and uses it the way another project
+# would. Splitting them is what lets the last job prove the hub's actual promise —
+# the published bin/ — instead of the build tree it happened to come from.
 on:
   push:
     branches:
@@ -19,16 +25,39 @@ permissions:
 
 jobs:
   hub:
-    name: hub (${{ matrix.config }})
+    name: hub (${{ matrix.arch }} ${{ matrix.config }})
     # Pinned image label, not windows-latest: the toolchain (VS 2022, CMake) is
-    # part of the input here, so it must not move under us.
+    # part of the input here, so it must not move under us. It is also why both
+    # architectures build on this one runner — windows-2022 is the pinned image and
+    # Win32 builds natively on it, so x86 costs configuration time, nothing more.
     runs-on: windows-2022
     strategy:
       fail-fast: false
+      # Written out rather than crossed automatically: the arch name used in the
+      # layout, the VS platform spelling and the preset names are three different
+      # words for the same thing, and this is the one place they are tied together.
       matrix:
-        config:
-          - Debug
-          - Release
+        include:
+          - arch: x64
+            platform: x64
+            configure: ci-x64
+            build: x64-Debug
+            config: Debug
+          - arch: x64
+            platform: x64
+            configure: ci-x64
+            build: x64-Release
+            config: Release
+          - arch: x86
+            platform: Win32
+            configure: ci-x86
+            build: x86-Debug
+            config: Debug
+          - arch: x86
+            platform: Win32
+            configure: ci-x86
+            build: x86-Release
+            config: Release
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -43,6 +72,7 @@ jobs:
 
       - name: Show toolchain
         run: |
+          echo "arch=${{ matrix.arch }} platform=${{ matrix.platform }} config=${{ matrix.config }}"
           cmake --version
           git --version
 
@@ -59,16 +89,17 @@ jobs:
           fi
 
       - name: Configure
-        run: cmake --preset ci
+        run: cmake --preset ${{ matrix.configure }}
 
       - name: Build
-        run: cmake --build --preset ${{ matrix.config }}
+        run: cmake --build --preset ${{ matrix.build }}
 
       - name: Assert the staged hub is complete and signed off
         shell: bash
         run: |
           set -euo pipefail
           config="${{ matrix.config }}"
+          arch="${{ matrix.arch }}"
 
           echo "--- bin/include"
           ls bin/include
@@ -98,6 +129,17 @@ jobs:
             fi
           done
 
+          # One job builds one column. A member that staged into another arch — or
+          # into both — would hand out an artifact no consumer could trust, and the
+          # failure would only surface later as a link error, so it is caught here.
+          for member in zlib zstd lz4 mbedtls curl quickjs; do
+            staged="$(ls "bin/lib/$member" 2>/dev/null || true)"
+            if [ "$staged" != "$arch" ]; then
+              echo "bin/lib/$member stages '$staged', expected the '$arch' column" >&2
+              exit 1
+            fi
+          done
+
           # The static CRT is a deliberate choice, not a default (docs/adr/0006):
           # every staged library must carry the static runtime marker and none may
           # carry the dynamic one. This is read out of the artifacts themselves, so
@@ -107,7 +149,7 @@ jobs:
             Release) want_static="LIBCMT" ;;
           esac
           static_crt_libraries=0
-          for library in $(find bin/lib -name '*.lib'); do
+          for library in $(find bin/lib -path "*/${arch}/*" -name '*.lib'); do
             if grep -aq "$want_static" "$library"; then
               static_crt_libraries=$((static_crt_libraries + 1))
             fi
@@ -123,38 +165,150 @@ jobs:
           echo "static CRT ($want_static) confirmed in $static_crt_libraries staged libraries"
 
           echo "--- generated runtime settings"
-          grep -rho '<RuntimeLibrary>[^<]*</RuntimeLibrary>' build/ci --include='*.vcxproj' \
-            | sort | uniq -c || true
+          grep -rho '<RuntimeLibrary>[^<]*</RuntimeLibrary>' "build/${{ matrix.configure }}" \
+            --include='*.vcxproj' | sort | uniq -c || true
 
           for member in zlib zstd lz4 mbedtls curl quickjs; do
-            if [ -z "$(find "bin/lib/$member" -path "*/${config}/*.lib" -print -quit)" ]; then
-              echo "no ${config} library staged for $member" >&2
+            if [ -z "$(find "bin/lib/$member/$arch" -path "*/${config}/*.lib" -print -quit)" ]; then
+              echo "no ${config} ${arch} library staged for $member" >&2
               exit 1
             fi
           done
 
-      # A project that imports nothing from the hub's CMake and reads bin/ the way
-      # another project would. Matching the CRT is part of what it proves.
-      - name: Consumer smoke test (staged bin/ only)
+      # Short retention: these are the columns, published a moment later by the
+      # `publish` job as the single artifact consumers are meant to take.
+      - name: Upload this column
+        uses: actions/upload-artifact@v4
+        with:
+          name: pkg-bin-${{ matrix.arch }}-${{ matrix.config }}
+          path: bin/
+          if-no-files-found: error
+          retention-days: 1
+
+  # The layout promises one shared include/ tree beside a lib/ column per
+  # (arch, config), so the published artifact should be that shape and not four
+  # separate archives. A flat merge would silently let one column's headers win,
+  # so the columns are compared first and the merge runs only if they agree.
+  publish:
+    name: publish (pkg-bin)
+    needs: hub
+    runs-on: windows-2022
+    steps:
+      - name: Collect the columns
+        uses: actions/download-artifact@v4
+        with:
+          pattern: pkg-bin-*
+          path: columns/
+
+      - name: Check the columns agree on the shared header tree
         shell: bash
         run: |
           set -euo pipefail
-          config="${{ matrix.config }}"
 
-          cmake -S tests/consumer -B build/consumer \
-            -G "Visual Studio 17 2022" -A x64 \
-            -DPKG_CONFIG="$config"
+          reference="$(ls -d columns/*/ | head -n1)"
+          for column in columns/*/; do
+            if ! diff -r "${reference}include" "${column}include"; then
+              echo "${column} stages headers that differ from ${reference}" >&2
+              exit 1
+            fi
+          done
+          echo "all $(ls -d columns/*/ | wc -l) columns share one include/ tree"
 
-          cmake --build build/consumer --config "$config"
+          echo "--- columns to be published"
+          find columns -name '*.lib' | sort
 
-          for consumer in consumer_c consumer_net consumer_phnt consumer_cpp; do
-            "./build/consumer/${config}/${consumer}.exe"
+      - name: Publish the hub as one artifact
+        uses: actions/upload-artifact/merge@v4
+        with:
+          name: pkg-bin
+          pattern: pkg-bin-*
+          separate-directories: false
+          delete-merged: true
+          retention-days: 14
+
+  # The hub's promise is the folder it publishes, not the build tree it came from.
+  # So this job deliberately does not build the hub and does not clone vendor/:
+  # checkout, unpack the published artifact, and use it. If that fails, the
+  # artifact is not usable, however green the job that produced it was.
+  consume:
+    name: consume (${{ matrix.arch }} ${{ matrix.config }})
+    needs: publish
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            platform: x64
+            config: Debug
+          - arch: x64
+            platform: x64
+            config: Release
+          - arch: x86
+            platform: Win32
+            config: Debug
+          - arch: x86
+            platform: Win32
+            config: Release
+    steps:
+      - name: Checkout (source only — no submodules)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          submodules: false
+
+      - name: Download the published artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: pkg-bin
+          path: bin/
+
+      - name: Show what a consumer receives
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # vendor/ is present only as empty gitlink directories. If anything
+          # landed in it, this job would not be testing what it claims to.
+          if [ -d vendor ]; then
+            for entry in vendor/*; do
+              [ -d "$entry" ] || continue
+              if [ -n "$(ls -A "$entry")" ]; then
+                echo "$entry is not empty — a consumer must not need vendor/" >&2
+                exit 1
+              fi
+            done
+          fi
+
+          echo "--- bin/include"
+          ls bin/include
+          echo "--- bin/lib/${{ matrix.arch }}/${{ matrix.config }}"
+          find "bin/lib/${{ matrix.arch }}/${{ matrix.config }}" -name '*.lib' | sort
+
+          # The published artifact is the whole hub, so every column has to be in
+          # it — checked through one member that stages libraries in all of them.
+          for column in x64/Debug x64/Release x86/Debug x86/Release; do
+            if [ -z "$(find "bin/lib/zlib/$column" -name '*.lib' -print -quit)" ]; then
+              echo "the published artifact has no $column column for zlib" >&2
+              exit 1
+            fi
           done
 
-      - name: Upload staged hub
-        uses: actions/upload-artifact@v4
-        with:
-          name: pkg-bin-${{ matrix.config }}
-          path: bin/
-          if-no-files-found: error
-          retention-days: 14
+      - name: Configure the consumer (no hub CMake, no vendor)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S tests/consumer -B build/consumer \
+            -G "Visual Studio 17 2022" -A ${{ matrix.platform }} \
+            -DPKG_CONFIG="${{ matrix.config }}" \
+            -DPKG_ARCH="${{ matrix.arch }}"
+
+      - name: Build and run the consumer
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake --build build/consumer --config ${{ matrix.config }}
+
+          for consumer in consumer_c consumer_net consumer_phnt consumer_cpp; do
+            "./build/consumer/${{ matrix.config }}/${consumer}.exe"
+          done
