@@ -1,11 +1,13 @@
 name: ci
 
 # CI is the build environment for this hub (docs/adr/0002): nothing is built on a
-# developer machine. Run on the experiment branch while it is being proven, and on
+# developer machine. Every branch whose content is meant to be trusted builds
+# here — the experiment branch while it is being proven, main once it lands, and
 # every pull request aimed at main.
 on:
   push:
     branches:
+      - main
       - cmake/harness
   pull_request:
     branches:
