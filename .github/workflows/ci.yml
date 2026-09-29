@@ -133,6 +133,24 @@ jobs:
             fi
           done
 
+      # A project that imports nothing from the hub's CMake and reads bin/ the way
+      # another project would. Matching the CRT is part of what it proves.
+      - name: Consumer smoke test (staged bin/ only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          config="${{ matrix.config }}"
+
+          cmake -S tests/consumer -B build/consumer \
+            -G "Visual Studio 17 2022" -A x64 \
+            -DPKG_CONFIG="$config"
+
+          cmake --build build/consumer --config "$config"
+
+          for consumer in consumer_c consumer_net consumer_phnt consumer_cpp; do
+            "./build/consumer/${config}/${consumer}.exe"
+          done
+
       - name: Upload staged hub
         uses: actions/upload-artifact@v4
         with:
