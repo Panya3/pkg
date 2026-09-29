@@ -7,7 +7,9 @@
 
 #include <winsock2.h>
 
-#include <curl/curl.h>
+/* Spelled against curl's include root: bin/include/curl/ holds curl.h directly,
+ * because the hub unwraps a header root that only repeated the member name. */
+#include <curl.h>
 #include <stdio.h>
 
 static int failures = 0;
