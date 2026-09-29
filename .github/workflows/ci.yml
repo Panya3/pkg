@@ -98,6 +98,34 @@ jobs:
             fi
           done
 
+          # The static CRT is a deliberate choice, not a default (docs/adr/0006):
+          # every staged library must carry the static runtime marker and none may
+          # carry the dynamic one. This is read out of the artifacts themselves, so
+          # a member quietly switching runtimes cannot slip through.
+          case "$config" in
+            Debug)   want_static="LIBCMTD" ;;
+            Release) want_static="LIBCMT" ;;
+          esac
+          static_crt_libraries=0
+          for library in $(find bin/lib -name '*.lib'); do
+            if grep -aq "$want_static" "$library"; then
+              static_crt_libraries=$((static_crt_libraries + 1))
+            fi
+            if grep -aq 'MSVCRT' "$library"; then
+              echo "$library links the dynamic CRT, expected $want_static" >&2
+              exit 1
+            fi
+          done
+          if [ "$static_crt_libraries" -eq 0 ]; then
+            echo "no staged library links the static CRT ($want_static)" >&2
+            exit 1
+          fi
+          echo "static CRT ($want_static) confirmed in $static_crt_libraries staged libraries"
+
+          echo "--- generated runtime settings"
+          grep -rho '<RuntimeLibrary>[^<]*</RuntimeLibrary>' build/ci --include='*.vcxproj' \
+            | sort | uniq -c || true
+
           for member in zlib zstd lz4 mbedtls curl quickjs; do
             if [ -z "$(find "bin/lib/$member" -path "*/${config}/*.lib" -print -quit)" ]; then
               echo "no ${config} library staged for $member" >&2
