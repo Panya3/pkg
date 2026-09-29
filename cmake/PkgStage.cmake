@@ -2,6 +2,7 @@
 #
 #   pkg_resolve_arch()                 -> PKG_ARCH
 #   pkg_pick_target(<out> <names>...)  -> first target that exists
+#   pkg_include_root(<out> <member> <root>) -> root, minus a redundant wrapper
 #   pkg_stage(<member> TARGET <t> [EXTRA_TARGETS <t>...]
 #                       [HEADERS <dir>...] [HEADER_FILES <file>...])
 #   pkg_alias(<member> <target>)
@@ -9,6 +10,32 @@
 # pkg_stage() does two things for one member:
 #   * binaries -> bin/lib/<member>/<arch>/<config>/
 #   * headers  -> bin/include/<member>/   (this dir IS the member's include root)
+
+# A member's include root is the directory that has to go on the include path.
+# When that directory wraps exactly one subdirectory named after the member —
+# curl/include/curl, magic_enum/include/magic_enum — the wrapper only repeats the
+# name: descend into it, so bin/include/<member>/ holds the headers under the
+# names callers actually write (curl/curl.h, magic_enum/magic_enum.hpp).
+#
+# Members whose root does not fit that shape are left alone on purpose:
+# nlohmann/json includes itself as <nlohmann/...>, and mbedtls's root carries
+# both mbedtls/ and psa/, either of which a naive descent would drop.
+function(pkg_include_root out_var member root)
+    file(GLOB _entries LIST_DIRECTORIES true "${root}/*")
+    set(_subdirs "")
+    foreach(_entry IN LISTS _entries)
+        if(IS_DIRECTORY "${_entry}")
+            list(APPEND _subdirs "${_entry}")
+        endif()
+    endforeach()
+
+    list(LENGTH _subdirs _count)
+    if(_count EQUAL 1 AND IS_DIRECTORY "${root}/${member}")
+        set(${out_var} "${root}/${member}" PARENT_SCOPE)
+    else()
+        set(${out_var} "${root}" PARENT_SCOPE)
+    endif()
+endfunction()
 
 # Normalise the architecture into the name used inside bin/lib/.
 function(pkg_resolve_arch)

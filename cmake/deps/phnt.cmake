@@ -9,5 +9,6 @@ add_subdirectory(
 )
 
 pkg_pick_target(_phnt phnt)
-pkg_stage(phnt TARGET ${_phnt} HEADERS "${PKG_VENDOR_DIR}/systeminformer/phnt/include")
+pkg_include_root(_phnt_headers phnt "${PKG_VENDOR_DIR}/systeminformer/phnt/include")
+pkg_stage(phnt TARGET ${_phnt} HEADERS "${_phnt_headers}")
 pkg_alias(phnt ${_phnt})

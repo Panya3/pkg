@@ -83,6 +83,21 @@ jobs:
             fi
           done
 
+          # Members whose include root only repeated their own name are unwrapped,
+          # so callers write the canonical <curl/curl.h>, <magic_enum/magic_enum.hpp>.
+          for header in curl/curl.h magic_enum/magic_enum.hpp; do
+            if [ ! -f "bin/include/$header" ]; then
+              echo "expected bin/include/$header to be unwrapped" >&2
+              exit 1
+            fi
+          done
+          for wrapped in curl/curl magic_enum/magic_enum; do
+            if [ -d "bin/include/$wrapped" ]; then
+              echo "bin/include/$wrapped should not exist (duplicated name)" >&2
+              exit 1
+            fi
+          done
+
           for member in zlib zstd lz4 mbedtls curl quickjs; do
             if [ -z "$(find "bin/lib/$member" -path "*/${config}/*.lib" -print -quit)" ]; then
               echo "no ${config} library staged for $member" >&2

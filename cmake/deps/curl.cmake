@@ -20,5 +20,6 @@ set(CURL_ZSTD            OFF CACHE BOOL "" FORCE)
 add_subdirectory("${PKG_VENDOR_DIR}/curl" "${CMAKE_BINARY_DIR}/vendor/curl" EXCLUDE_FROM_ALL)
 
 pkg_pick_target(_curl libcurl_static libcurl)
-pkg_stage(curl TARGET ${_curl} HEADERS "${PKG_VENDOR_DIR}/curl/include")
+pkg_include_root(_curl_headers curl "${PKG_VENDOR_DIR}/curl/include")
+pkg_stage(curl TARGET ${_curl} HEADERS "${_curl_headers}")
 pkg_alias(curl ${_curl})

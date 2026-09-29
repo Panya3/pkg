@@ -14,9 +14,12 @@ pkg_pick_target(_mbedtls   mbedtls_static  mbedtls)
 pkg_pick_target(_mbedx509  mbedx509_static mbedx509)
 pkg_pick_target(_mbedcrypto mbedcrypto_static mbedcrypto)
 
+# Stays wrapped: the include root carries both mbedtls/ and psa/, and the headers
+# include each other as <mbedtls/...>.
+pkg_include_root(_mbedtls_headers mbedtls "${PKG_VENDOR_DIR}/mbedtls/include")
 pkg_stage(mbedtls TARGET ${_mbedtls}
     EXTRA_TARGETS ${_mbedx509} ${_mbedcrypto}
-    HEADERS "${PKG_VENDOR_DIR}/mbedtls/include"
+    HEADERS "${_mbedtls_headers}"
 )
 
 pkg_alias(mbedtls  ${_mbedtls})

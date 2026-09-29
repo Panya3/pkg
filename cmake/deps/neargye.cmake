@@ -25,6 +25,9 @@ foreach(_member magic_enum nameof scope_guard semver yacppl)
         EXCLUDE_FROM_ALL
     )
     pkg_pick_target(_target ${_member})
-    pkg_stage(${_member} TARGET ${_target} HEADERS "${PKG_VENDOR_DIR}/neargye/${_member}/include")
+    # magic_enum wraps its headers in include/magic_enum/, which pkg_include_root
+    # unwraps; the other four sit flat in include/.
+    pkg_include_root(_headers ${_member} "${PKG_VENDOR_DIR}/neargye/${_member}/include")
+    pkg_stage(${_member} TARGET ${_target} HEADERS "${_headers}")
     pkg_alias(${_member} ${_target})
 endforeach()
