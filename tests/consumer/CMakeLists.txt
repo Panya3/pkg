@@ -106,8 +106,16 @@ target_link_libraries(consumer_c PRIVATE ws2_32 bcrypt)
 # --- C side: curl (own TU, so winsock2.h can come first) --------------------
 add_executable(consumer_net consumer_net.c)
 target_include_directories(consumer_net PRIVATE "${PKG_INCLUDE_DIR}/curl")
+# The hub stages the static libcurl, and a static curl is a compile-time fact:
+# without CURL_STATICLIB, curl.h declares every entry point __declspec(dllimport)
+# and the link fails on __imp_curl_*. Part of the contract, not a workaround.
+target_compile_definitions(consumer_net PRIVATE CURL_STATICLIB)
 pkg_consumer_link(consumer_net curl)
-target_link_libraries(consumer_net PRIVATE ws2_32 crypt32 normaliz wldap32)
+# Linking the staged files means the consumer supplies curl's Windows system
+# libraries. This is exactly the list curl's own CMake appends for a Schannel
+# build with LDAP and IDN off: SSPI brings secur32 and iphlpapi, the crypto path
+# brings advapi32/crypt32/bcrypt.
+target_link_libraries(consumer_net PRIVATE ws2_32 iphlpapi bcrypt advapi32 crypt32 secur32)
 
 # --- C side: phnt (headers only, compile-level contract) --------------------
 add_executable(consumer_phnt consumer_phnt.c)
