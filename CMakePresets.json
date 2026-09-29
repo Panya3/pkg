@@ -1,0 +1,35 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 25,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "ci",
+      "displayName": "CI (Visual Studio 17 2022, x64)",
+      "description": "The only supported way to configure the hub — see docs/adr/0002",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/build/ci",
+      "cacheVariables": {
+        "BUILD_SHARED_LIBS": "OFF",
+        "BUILD_STATIC_LIBS": "ON",
+        "BUILD_TESTING": "OFF"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "Debug",
+      "configurePreset": "ci",
+      "configuration": "Debug"
+    },
+    {
+      "name": "Release",
+      "configurePreset": "ci",
+      "configuration": "Release"
+    }
+  ]
+}

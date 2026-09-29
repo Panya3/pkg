@@ -1,2 +1,8 @@
 # local agent instructions — kept out of version control
 CLAUDE.md
+
+# local build tree
+/build/
+
+# staged hub artifacts (produced by the CMake harness, uploaded by CI)
+/bin/

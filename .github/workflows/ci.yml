@@ -1,0 +1,97 @@
+name: ci
+
+# CI is the build environment for this hub (docs/adr/0002): nothing is built on a
+# developer machine. Run on the experiment branch while it is being proven, and on
+# every pull request aimed at main.
+on:
+  push:
+    branches:
+      - cmake/harness
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  hub:
+    name: hub (${{ matrix.config }})
+    # Pinned image label, not windows-latest: the toolchain (VS 2022, CMake) is
+    # part of the input here, so it must not move under us.
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - Debug
+          - Release
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          submodules: false
+
+      # Shallow everywhere, recursively, because mbedtls needs its nested
+      # `framework` submodule or its configure aborts.
+      - name: Clone vendor submodules (shallow, recursive)
+        run: git submodule update --init --recursive --depth 1 --jobs 4
+
+      - name: Show toolchain
+        run: |
+          cmake --version
+          git --version
+
+      - name: Guard — CMake too old (>= 3.25 required)
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(cmake --version | head -n1 | sed -E 's/[^0-9.]//g')"
+          required="3.25"
+          oldest="$(printf '%s\n%s\n' "$required" "$version" | sort -V | head -n1)"
+          if [ "$oldest" != "$required" ]; then
+            echo "CMake $version is older than the required $required" >&2
+            exit 1
+          fi
+
+      - name: Configure
+        run: cmake --preset ci
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.config }}
+
+      - name: Assert the staged hub is complete and signed off
+        shell: bash
+        run: |
+          set -euo pipefail
+          config="${{ matrix.config }}"
+
+          echo "--- bin/include"
+          ls bin/include
+          echo "--- bin/lib"
+          find bin/lib -type f | sort
+
+          for member in zlib zstd lz4 mbedtls curl quickjs json phnt stb \
+                        magic_enum nameof scope_guard semver yacppl; do
+            if [ -z "$(ls -A "bin/include/$member" 2>/dev/null)" ]; then
+              echo "no staged headers for $member" >&2
+              exit 1
+            fi
+          done
+
+          for member in zlib zstd lz4 mbedtls curl quickjs; do
+            if [ -z "$(find "bin/lib/$member" -path "*/${config}/*.lib" -print -quit)" ]; then
+              echo "no ${config} library staged for $member" >&2
+              exit 1
+            fi
+          done
+
+      - name: Upload staged hub
+        uses: actions/upload-artifact@v4
+        with:
+          name: pkg-bin-${{ matrix.config }}
+          path: bin/
+          if-no-files-found: error
+          retention-days: 14
