@@ -1,6 +1,6 @@
 # Helpers that place a vendor library inside the hub.
 #
-#   pkg_resolve_arch()              -> PKG_ARCH
+#   pkg_resolve_arch()                 -> PKG_ARCH
 #   pkg_pick_target(<out> <names>...)  -> first target that exists
 #   pkg_stage(<member> TARGET <t> [EXTRA_TARGETS <t>...]
 #                       [HEADERS <dir>...] [HEADER_FILES <file>...])
@@ -32,7 +32,7 @@ endfunction()
 function(pkg_pick_target out_var)
     foreach(_candidate IN LISTS ARGN)
         if(TARGET ${_candidate})
-            set(${out_var} ${_candidate} PARENT_SCOPE)
+            set(${out_var} "${_candidate}" PARENT_SCOPE)
             return()
         endif()
     endforeach()
@@ -45,7 +45,7 @@ function(pkg_stage member)
         message(FATAL_ERROR "pkg_stage(${member}): TARGET is required")
     endif()
 
-    set(_targets "${ARG_TARGET};${ARG_EXTRA_TARGETS}")
+    set(_targets ${ARG_TARGET} ${ARG_EXTRA_TARGETS})
     foreach(_target IN LISTS _targets)
         if(NOT TARGET ${_target})
             message(FATAL_ERROR "pkg_stage(${member}): target '${_target}' does not exist")
@@ -91,7 +91,11 @@ function(pkg_stage member)
         endif()
     endforeach()
 
-    set(PKG_STAGE_TARGETS "${PKG_STAGE_TARGETS};pkg_stage_${member}" PARENT_SCOPE)
+    # Append to the registry in the top-level scope we were included from.
+    # Built with list(APPEND) so an initially empty list gains no empty element.
+    set(_stages ${PKG_STAGE_TARGETS})
+    list(APPEND _stages "pkg_stage_${member}")
+    set(PKG_STAGE_TARGETS "${_stages}" PARENT_SCOPE)
 endfunction()
 
 function(pkg_alias member target)
@@ -99,5 +103,8 @@ function(pkg_alias member target)
         message(FATAL_ERROR "pkg_alias(${member}): target '${target}' does not exist")
     endif()
     add_library(pkg::${member} ALIAS ${target})
-    set(PKG_MEMBER_TARGETS "${PKG_MEMBER_TARGETS};pkg::${member}" PARENT_SCOPE)
+
+    set(_members ${PKG_MEMBER_TARGETS})
+    list(APPEND _members "pkg::${member}")
+    set(PKG_MEMBER_TARGETS "${_members}" PARENT_SCOPE)
 endfunction()
