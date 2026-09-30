@@ -5,11 +5,14 @@ name: ci
 # here — the experiment branch while it is being proven, main once it lands, and
 # every pull request aimed at main.
 #
-# Three jobs on purpose. `hub` builds one (arch, config) column; `publish` folds
+# Four jobs on purpose. `hub` builds one (arch, config) column; `publish` folds
 # the columns into the single artifact the layout promises; `consume` builds
 # nothing at all, downloads that artifact and uses it the way another project
-# would. Splitting them is what lets the last job prove the hub's actual promise —
-# the published bin/ — instead of the build tree it happened to come from.
+# would; `setup` turns that same artifact into the per-user setup.exe a Windows
+# user can double-click, and proves the installer - not the zip it wraps.
+# Splitting them is what lets the last jobs prove the hub's actual promises —
+# the published bin/ and the installer built from it - instead of the build
+# tree they happened to come from.
 on:
   push:
     branches:
@@ -383,3 +386,125 @@ jobs:
 
           build\install-probe.exe || exit /b 1
           echo Install.bat named the hub and cl.exe built and ran against it
+
+  # The artifact has one more way in, for the consumer who double-clicks: a
+  # per-user setup.exe (docs/adr/0007). The installer packages the artifact
+  # exactly as published - no renaming, no re-laying-out - because anything
+  # else would make the setup.exe promise a different hub than the zip does.
+  # What is proven here is the installer itself: silent install, the installed
+  # tree, PKG_DIR set and stored, a compile through %PKG_DIR% alone, then the
+  # uninstall and the guarantee that it clears the stored value only when it
+  # points at the folder being removed.
+  setup:
+    name: setup (pkg-setup)
+    needs: publish
+    runs-on: windows-2022
+    steps:
+      - name: Checkout (the .iss only — no submodules)
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+          submodules: false
+
+      - name: Download the published artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: pkg-bin
+          path: artifact/
+
+      - name: Compile the installer (Inno Setup, preinstalled on the pinned image)
+        shell: cmd
+        run: |
+          rem The version travels with the exe's name and its Add-Remove entry:
+          rem CI-built builds are numbered by run, traced back by full SHA.
+          "%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe" /DpkgVersion=0.${{ github.run_number }}+${{ github.sha }} setup\pkg.iss || exit /b 1
+          rem The .iss sets OutputBaseFilename=pkg-setup-<version>, OutputDir=.:
+          rem the exe lands in the repo root, next to the artifact it wrapped.
+          if not exist pkg-setup-*.exe (echo ISCC produced no pkg-setup-*.exe 1>&2 & exit /b 1)
+
+      - name: Upload the installer
+        uses: actions/upload-artifact@v7
+        with:
+          name: pkg-setup
+          path: pkg-setup-*.exe
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Prove it - silent install, use, uninstall, and what remains
+        shell: cmd
+        run: |
+          set "SETUPEXE="
+          for %%F in (pkg-setup-*.exe) do set "SETUPEXE=%%F"
+
+          rem Silent, per-user, into a temp folder - the same path a real user's
+          rem double-click takes, minus the wizard pages.
+          set "INSTALLDIR=%TEMP%\pkg-smoke"
+          rmdir /s /q "%INSTALLDIR%" 2>nul
+          "%SETUPEXE%" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /DIR="%INSTALLDIR%" || exit /b 1
+
+          rem The tree, not a spot check: everything the artifact had is here.
+          if not exist "%INSTALLDIR%\Install.bat" (echo the installer dropped Install.bat 1>&2 & exit /b 1)
+          for %%M in (zlib zstd lz4 mbedtls curl quickjs json phnt stb magic_enum nameof scope_guard semver yacppl) do (
+            if not exist "%INSTALLDIR%\include\%%M" (echo the installer dropped include\%%M 1>&2 & exit /b 1)
+          )
+          for %%M in (zlib zstd lz4 mbedtls curl quickjs) do (
+            if not exist "%INSTALLDIR%\lib\%%M\x64\Debug\*.lib" (echo the installer dropped lib\%%M x64 Debug 1>&2 & exit /b 1)
+          )
+
+          rem Install.bat ran as the last setup step: the stored value has to be
+          rem there, and to name the folder the installer chose.
+          reg query "HKCU\Environment" /v PKG_DIR | findstr /i /c:"%INSTALLDIR%" >nul || (echo PKG_DIR was not stored at the install folder 1>&2 & exit /b 1)
+
+          rem A dev shell, then the installed hub - the same way consume uses the
+          rem unpacked artifact, so this proves the setup.exe and not the runner.
+          set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
+          for /f "usebackq delims=" %%I in (`"%VSWHERE%" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSDIR=%%I"
+          if not defined VSDIR (echo no Visual Studio with the C++ toolchain was found 1>&2 & exit /b 1)
+          call "%VSDIR%\VC\Auxiliary\Build\vcvarsall.bat" x64 || exit /b 1
+
+          rem Everything off PKG_DIR, exactly as the artifact's other way in.
+          set "PKG_INCLUDE=%PKG_DIR%\include"
+          set "INCLUDE=%PKG_INCLUDE%\zlib;%PKG_INCLUDE%\zstd;%PKG_INCLUDE%\lz4;%PKG_INCLUDE%\mbedtls;%PKG_INCLUDE%\quickjs;%PKG_INCLUDE%\stb;%INCLUDE%"
+          set "LIBS="
+          rem Two steps, not style: cmd expands wildcards in the last path
+          rem component only, so one glob with lib\* in the middle matches
+          rem nothing. Walking the members also makes an empty member harmless.
+          for /d %%M in ("%PKG_DIR%\lib\*") do for %%F in ("%%~M\x64\Debug\*.lib") do call set "LIBS=%%LIBS%% "%%~F""
+          if not defined LIBS (echo no staged libraries under PKG_DIR 1>&2 & exit /b 1)
+
+          if not exist build mkdir build
+          cl /nologo /MTd /Fo:build\ /Fe:build\setup-probe.exe "%CD%\tests\consumer\consumer_c.c" /link ws2_32.lib bcrypt.lib %LIBS% || exit /b 1
+          build\setup-probe.exe || exit /b 1
+
+          rem --- the uninstall, and what it must leave behind ---
+          if not exist "%INSTALLDIR%\unins000.exe" (echo no uninstaller at the install folder 1>&2 & exit /b 1)
+          "%INSTALLDIR%\unins000.exe" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART || exit /b 1
+          rem Inno's uninstaller detaches; wait for the folder to go. ping, not
+          rem timeout: timeout refuses a redirected stdin, which is exactly what
+          rem a runner step has.
+          set /a TRIES=0
+          :wait_gone
+          ping -n 3 127.0.0.1 >nul
+          if exist "%INSTALLDIR%" (set /a TRIES+=1 & if %TRIES% lss 15 goto wait_gone)
+          if exist "%INSTALLDIR%" (echo the uninstall left the install folder behind 1>&2 & exit /b 1)
+
+          rem The folder is gone, so the stored value must be gone with it - it
+          rem pointed here, and clearing it is the uninstall's last act. A value
+          rem left pointing into a deleted folder is the one bug this check is for.
+          reg query "HKCU\Environment" /v PKG_DIR >nul 2>&1 && (echo PKG_DIR survived the uninstall 1>&2 & exit /b 1)
+
+          rem And a hub installed some other way is none of its business: install
+          rem the same build once more, point PKG_DIR somewhere else on purpose,
+          rem and uninstall - the foreign value must walk out untouched.
+          "%SETUPEXE%" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /DIR="%INSTALLDIR%" || exit /b 1
+          setx PKG_DIR "C:\not-this-pkg" >nul
+          "%INSTALLDIR%\unins000.exe" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART || exit /b 1
+          set /a TRIES=0
+          :wait_gone2
+          ping -n 3 127.0.0.1 >nul
+          if exist "%INSTALLDIR%" (set /a TRIES+=1 & if %TRIES% lss 15 goto wait_gone2)
+          reg query "HKCU\Environment" /v PKG_DIR | findstr /i /c:"not-this-pkg" >nul || (echo the uninstall cleared a foreign PKG_DIR 1>&2 & exit /b 1)
+          rem leave the runner's HKCU the way it was found
+          reg delete "HKCU\Environment" /v PKG_DIR /f >nul 2>&1
+
+          echo setup.exe installed, was built against, uninstalled, and uninstalled politely
