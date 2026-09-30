@@ -135,8 +135,21 @@ target_include_directories(consumer_cpp PRIVATE
     "${PKG_INCLUDE_DIR}/scope_guard" "${PKG_INCLUDE_DIR}/semver" "${PKG_INCLUDE_DIR}/yacppl")
 
 # --- C++ side: imgui (a member that stages libraries) ------------------------
-# No backend is linked yet, so this program builds the font atlas itself and runs
-# a frame with no window and no GPU — the file's comment says why.
+# imgui is not one library: the core and each backend are separate staged
+# libraries in the member's directory, so the glob above links the core beside the
+# parts. One of them drives the frame — the do-nothing backend, since a build
+# machine has no window and no GPU — and the win32 and DirectX 11 parts are
+# referenced at run time instead, which is what forces those two staged libraries
+# to link as well. The file's comment says why the frame needs no window.
 add_executable(consumer_imgui consumer_imgui.cpp)
 target_include_directories(consumer_imgui PRIVATE "${PKG_INCLUDE_DIR}/imgui")
 pkg_consumer_link(consumer_imgui imgui)
+# Linking the staged files means the consumer supplies the Windows system
+# libraries the backends it uses need, exactly as it already supplies ws2_32 for
+# curl: user32 and gdi32 for the win32 platform, and d3d11, dxgi and d3dcompiler
+# for the DirectX 11 renderer. (The platform backend also wants dwmapi, which
+# upstream's own source asks for with a #pragma, so it names itself.) The hub
+# stages libraries, not link interfaces, so this list belongs here. The other
+# renderers staged beside these need no entry: nothing here refers to them, so
+# none of theirs is taken out of the archive and none of them is linked in.
+target_link_libraries(consumer_imgui PRIVATE user32 gdi32 d3d11 dxgi d3dcompiler)
