@@ -268,16 +268,16 @@ jobs:
         run: |
           set -euo pipefail
 
-          # vendor/ is present only as empty gitlink directories. If anything
-          # landed in it, this job would not be testing what it claims to.
+          # vendor/ is present only as empty gitlink directories, and they nest
+          # (vendor/neargye/<member>), so "is this directory empty" is the wrong
+          # question — a single file anywhere under vendor/ is the right one.
           if [ -d vendor ]; then
-            for entry in vendor/*; do
-              [ -d "$entry" ] || continue
-              if [ -n "$(ls -A "$entry")" ]; then
-                echo "$entry is not empty — a consumer must not need vendor/" >&2
-                exit 1
-              fi
-            done
+            leaked="$(find vendor -type f -print -quit)"
+            if [ -n "$leaked" ]; then
+              echo "vendor/ holds $leaked — a consumer must not need vendor/" >&2
+              exit 1
+            fi
+            echo "vendor/ is $(find vendor -type d | wc -l) directories deep with no files"
           fi
 
           echo "--- bin/include"
