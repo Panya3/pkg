@@ -73,9 +73,9 @@ endif()
 # Every member the hub promises, and which of them must ship a library.
 set(PKG_MEMBERS
     zlib zstd lz4 mbedtls curl quickjs
-    json phnt stb magic_enum nameof scope_guard semver yacppl
+    json phnt stb magic_enum nameof scope_guard semver yacppl imgui
 )
-set(PKG_LIBRARY_MEMBERS zlib zstd lz4 mbedtls curl quickjs)
+set(PKG_LIBRARY_MEMBERS zlib zstd lz4 mbedtls curl quickjs imgui)
 
 foreach(_member IN LISTS PKG_MEMBERS)
     if(NOT IS_DIRECTORY "${PKG_INCLUDE_DIR}/${_member}")
@@ -133,3 +133,10 @@ add_executable(consumer_cpp consumer_cpp.cpp)
 target_include_directories(consumer_cpp PRIVATE
     "${PKG_INCLUDE_DIR}/json" "${PKG_INCLUDE_DIR}/magic_enum" "${PKG_INCLUDE_DIR}/nameof"
     "${PKG_INCLUDE_DIR}/scope_guard" "${PKG_INCLUDE_DIR}/semver" "${PKG_INCLUDE_DIR}/yacppl")
+
+# --- C++ side: imgui (a member that stages libraries) ------------------------
+# No backend is linked yet, so this program builds the font atlas itself and runs
+# a frame with no window and no GPU — the file's comment says why.
+add_executable(consumer_imgui consumer_imgui.cpp)
+target_include_directories(consumer_imgui PRIVATE "${PKG_INCLUDE_DIR}/imgui")
+pkg_consumer_link(consumer_imgui imgui)

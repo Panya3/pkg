@@ -4,8 +4,10 @@
 #   pkg_pick_target(<out> <names>...)  -> first target that exists
 #   pkg_include_root(<out> <member> <root>) -> root, minus a redundant wrapper
 #   pkg_stage(<member> TARGET <t> [EXTRA_TARGETS <t>...]
-#                       [HEADERS <dir>...] [HEADER_FILES <file>...])
+#                       [HEADERS <dir>...] [HEADERS_AT <subpath>=<dir|file>...]
+#                       [HEADER_FILES <file>...])
 #   pkg_alias(<member> <target>)
+#   pkg_alias_part(<member> <part> <target>)
 #
 # pkg_stage() does two things for one member:
 #   * binaries -> bin/lib/<member>/<arch>/<config>/
@@ -77,7 +79,7 @@ function(pkg_pick_target out_var)
 endfunction()
 
 function(pkg_stage member)
-    cmake_parse_arguments(ARG "" "TARGET" "EXTRA_TARGETS;HEADERS;HEADER_FILES" ${ARGN})
+    cmake_parse_arguments(ARG "" "TARGET" "EXTRA_TARGETS;HEADERS;HEADERS_AT;HEADER_FILES" ${ARGN})
     if(NOT ARG_TARGET)
         message(FATAL_ERROR "pkg_stage(${member}): TARGET is required")
     endif()
@@ -104,6 +106,30 @@ function(pkg_stage member)
             message(FATAL_ERROR "pkg_stage(${member}): header dir '${_dir}' does not exist")
         endif()
         list(APPEND _commands COMMAND "${CMAKE_COMMAND}" -E copy_directory "${_dir}" "${_dest}")
+    endforeach()
+
+    # <subpath>=<dir|file>: it lands under that subpath of the include root instead
+    # of at its top level. Needed where upstream documents a nested include spelling
+    # (imgui's misc/cpp/imgui_stdlib.h), which copying a directory into the root
+    # cannot express. Taking a file as well as a directory is what keeps a member's
+    # include root to headers: a directory is copied whole, so naming the one header
+    # under it is how a source file that sits beside it stays out of the artifact.
+    # A path containing '=' cannot be written this way; nothing stages one.
+    foreach(_entry IN LISTS ARG_HEADERS_AT)
+        string(REGEX REPLACE "=.*$" "" _subpath "${_entry}")
+        string(REGEX REPLACE "^[^=]*=" "" _src "${_entry}")
+        if(NOT _subpath OR NOT _src)
+            message(FATAL_ERROR "pkg_stage(${member}): HEADERS_AT entry '${_entry}' is not <subpath>=<dir-or-file>")
+        endif()
+        if(IS_DIRECTORY "${_src}")
+            list(APPEND _commands COMMAND "${CMAKE_COMMAND}" -E make_directory "${_dest}/${_subpath}"
+                                          COMMAND "${CMAKE_COMMAND}" -E copy_directory "${_src}" "${_dest}/${_subpath}")
+        elseif(EXISTS "${_src}")
+            list(APPEND _commands COMMAND "${CMAKE_COMMAND}" -E make_directory "${_dest}/${_subpath}"
+                                          COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${_src}" "${_dest}/${_subpath}")
+        else()
+            message(FATAL_ERROR "pkg_stage(${member}): HEADERS_AT entry '${_entry}' names '${_src}', which does not exist")
+        endif()
     endforeach()
 
     if(ARG_HEADER_FILES)
@@ -144,4 +170,16 @@ function(pkg_alias member target)
     set(_members ${PKG_MEMBER_TARGETS})
     list(APPEND _members "pkg::${member}")
     set(PKG_MEMBER_TARGETS "${_members}" PARENT_SCOPE)
+endfunction()
+
+# A part is a member's second, third, ... library: imgui's core is the member, and
+# each of its backends is a part. Parts are alternatives a consumer picks (one
+# platform, one renderer), not additions everyone receives, so a part is aliased
+# without joining the aggregate the hub publishes — whoever wants
+# pkg::imgui_dx11 spells it, and nothing links it on their behalf.
+function(pkg_alias_part member part target)
+    if(NOT TARGET ${target})
+        message(FATAL_ERROR "pkg_alias_part(${member} ${part}): target '${target}' does not exist")
+    endif()
+    add_library(pkg::${member}_${part} ALIAS ${target})
 endfunction()

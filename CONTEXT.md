@@ -21,6 +21,10 @@ _Avoid_: tier, layer, level, priority
 One third-party library admitted into the hub's build, whether it produces files or is header-only.
 _Avoid_: package, module, component, dependency
 
+**part**:
+One of the libraries a member stages when a member is more than one library — imgui's core and each of its backends are parts, each with its own staged library and its own alias.
+_Avoid_: component, sub-library, sub-module, target
+
 **staged artifact**:
 A member's output placed under `bin/` under that member's name instead of being left in the build tree.
 _Avoid_: output, dist, install tree

@@ -110,7 +110,7 @@ jobs:
           find bin/lib -type f | sort
 
           for member in zlib zstd lz4 mbedtls curl quickjs json phnt stb \
-                        magic_enum nameof scope_guard semver yacppl; do
+                        magic_enum nameof scope_guard semver yacppl imgui; do
             if [ -z "$(ls -A "bin/include/$member" 2>/dev/null)" ]; then
               echo "no staged headers for $member" >&2
               exit 1
@@ -132,6 +132,25 @@ jobs:
             fi
           done
 
+          # imgui's include shape is the one upstream's own project files produce:
+          # the core headers flat, each selected backend's header beside them, and
+          # misc/cpp nested, because that is the spelling upstream documents for the
+          # std::string helpers.
+          for header in imgui/imgui.h imgui/imgui_internal.h imgui/misc/cpp/imgui_stdlib.h; do
+            if [ ! -f "bin/include/$header" ]; then
+              echo "expected bin/include/$header to be staged" >&2
+              exit 1
+            fi
+          done
+
+          # ...and the implementation of those helpers stays out of it: it is inside
+          # the core library, and staging it beside the header would invite a second
+          # copy of it into a consumer's build.
+          if [ -f bin/include/imgui/misc/cpp/imgui_stdlib.cpp ]; then
+            echo "bin/include/imgui/misc/cpp/imgui_stdlib.cpp should not be staged" >&2
+            exit 1
+          fi
+
           # The hub's own installer, for a consumer who does not use CMake: it has
           # to travel in the artifact, because the artifact is all a consumer gets.
           # CMakeLists.txt copies it in, so an absent one means the copy broke.
@@ -143,7 +162,7 @@ jobs:
           # One job builds one column. A member that staged into another arch — or
           # into both — would hand out an artifact no consumer could trust, and the
           # failure would only surface later as a link error, so it is caught here.
-          for member in zlib zstd lz4 mbedtls curl quickjs; do
+          for member in zlib zstd lz4 mbedtls curl quickjs imgui; do
             staged="$(ls "bin/lib/$member" 2>/dev/null || true)"
             if [ "$staged" != "$arch" ]; then
               echo "bin/lib/$member stages '$staged', expected the '$arch' column" >&2
@@ -179,7 +198,7 @@ jobs:
           grep -rho '<RuntimeLibrary>[^<]*</RuntimeLibrary>' "build/${{ matrix.configure }}" \
             --include='*.vcxproj' | sort | uniq -c || true
 
-          for member in zlib zstd lz4 mbedtls curl quickjs; do
+          for member in zlib zstd lz4 mbedtls curl quickjs imgui; do
             if [ -z "$(find "bin/lib/$member/$arch" -path "*/${config}/*.lib" -print -quit)" ]; then
               echo "no ${config} ${arch} library staged for $member" >&2
               exit 1
@@ -334,7 +353,7 @@ jobs:
           set -euo pipefail
           cmake --build build/consumer --config ${{ matrix.config }}
 
-          for consumer in consumer_c consumer_net consumer_phnt consumer_cpp; do
+          for consumer in consumer_c consumer_net consumer_phnt consumer_cpp consumer_imgui; do
             "./build/consumer/${{ matrix.config }}/${consumer}.exe"
           done
 
@@ -444,10 +463,10 @@ jobs:
 
           rem The tree, not a spot check: everything the artifact had is here.
           if not exist "%INSTALLDIR%\Install.bat" (echo the installer dropped Install.bat 1>&2 & exit /b 1)
-          for %%M in (zlib zstd lz4 mbedtls curl quickjs json phnt stb magic_enum nameof scope_guard semver yacppl) do (
+          for %%M in (zlib zstd lz4 mbedtls curl quickjs json phnt stb magic_enum nameof scope_guard semver yacppl imgui) do (
             if not exist "%INSTALLDIR%\include\%%M" (echo the installer dropped include\%%M 1>&2 & exit /b 1)
           )
-          for %%M in (zlib zstd lz4 mbedtls curl quickjs) do (
+          for %%M in (zlib zstd lz4 mbedtls curl quickjs imgui) do (
             if not exist "%INSTALLDIR%\lib\%%M\x64\Debug\*.lib" (echo the installer dropped lib\%%M x64 Debug 1>&2 & exit /b 1)
           )
 

@@ -75,6 +75,7 @@ include(cmake/deps/json.cmake)
 include(cmake/deps/neargye.cmake)
 include(cmake/deps/phnt.cmake)
 include(cmake/deps/stb.cmake)
+include(cmake/deps/imgui.cmake)
 
 # ---------------------------------------------------------------------------
 # The hub's surface
