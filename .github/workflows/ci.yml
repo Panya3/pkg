@@ -269,15 +269,15 @@ jobs:
             tail -n 40 "$log" >&2
             exit 1
           fi
-          if [ -z "$(find "$probe" -name 'pkg_imgui_win32.vcxproj' -print -quit)" ]; then
-            echo "PKG_IMGUI_BACKENDS=win32 produced no target for pkg_imgui_win32" >&2
+          if [ -z "$(find "$probe" -name 'imgui_impl_win32.vcxproj' -print -quit)" ]; then
+            echo "PKG_IMGUI_BACKENDS=win32 produced no target for imgui_impl_win32" >&2
             exit 1
           fi
-          if [ -n "$(find "$probe" -name 'pkg_imgui_dx11.vcxproj' -print -quit)" ]; then
-            echo "PKG_IMGUI_BACKENDS=win32 still produced a target for pkg_imgui_dx11" >&2
+          if [ -n "$(find "$probe" -name 'imgui_impl_dx11.vcxproj' -print -quit)" ]; then
+            echo "PKG_IMGUI_BACKENDS=win32 still produced a target for imgui_impl_dx11" >&2
             exit 1
           fi
-          echo "narrowed selection: pkg_imgui_win32 is a target, pkg_imgui_dx11 is not"
+          echo "narrowed selection: imgui_impl_win32 is a target, imgui_impl_dx11 is not"
 
           # Half two: the empty list, which is the other end of the same promise —
           # excluding every backend leaves the core on its own. A fresh tree again, so
@@ -289,11 +289,11 @@ jobs:
             tail -n 40 "$log" >&2
             exit 1
           fi
-          if [ -z "$(find "$probe" -name 'pkg_imgui.vcxproj' -print -quit)" ]; then
+          if [ -z "$(find "$probe" -name 'imgui.vcxproj' -print -quit)" ]; then
             echo "PKG_IMGUI_BACKENDS= produced no target for the imgui core" >&2
             exit 1
           fi
-          if [ -n "$(find "$probe" -name 'pkg_imgui_*.vcxproj' -print -quit)" ]; then
+          if [ -n "$(find "$probe" -name 'imgui_*.vcxproj' -print -quit)" ]; then
             echo "PKG_IMGUI_BACKENDS= still produced a backend target" >&2
             exit 1
           fi

@@ -19,6 +19,13 @@
 # The demo and the std::string helpers ride along with the core: they are
 # translation units of the same release, and a consumer that calls neither pays
 # nothing for them in a static link.
+#
+# The targets carry upstream's own names, `imgui` and `imgui_impl_<backend>`, and
+# nothing of the hub's: a staged library is named after its target and the name it
+# ships under is one a consumer reads, so pkg_ — which belongs to targets the hub
+# declares for its own bookkeeping — must not appear in it. The name a consumer
+# spells for a part is the pkg:: alias below, and there the hub's scheme is exactly
+# right: pkg::imgui, pkg::imgui_win32.
 set(_imgui_core_sources
     imgui.cpp
     imgui_draw.cpp
@@ -28,14 +35,14 @@ set(_imgui_core_sources
     misc/cpp/imgui_stdlib.cpp
 )
 
-add_library(pkg_imgui STATIC)
+add_library(imgui STATIC)
 foreach(_source IN LISTS _imgui_core_sources)
-    target_sources(pkg_imgui PRIVATE "${PKG_VENDOR_DIR}/imgui/${_source}")
+    target_sources(imgui PRIVATE "${PKG_VENDOR_DIR}/imgui/${_source}")
 endforeach()
 
 # The same two directories the staged include root offers, so what the build sees
 # and what the artifact hands out are the same thing.
-target_include_directories(pkg_imgui PUBLIC
+target_include_directories(imgui PUBLIC
     "${PKG_VENDOR_DIR}/imgui"
     "${PKG_VENDOR_DIR}/imgui/backends"
 )
@@ -44,7 +51,7 @@ target_include_directories(pkg_imgui PUBLIC
 # comments and in the demo's string literals, which MSVC otherwise reads through
 # the system code page — warning C4819, and a mojibake demo.
 if(MSVC)
-    target_compile_options(pkg_imgui PRIVATE /utf-8)
+    target_compile_options(imgui PRIVATE /utf-8)
 endif()
 
 # The backends the hub knows how to build, and the single place that says so. Each
@@ -85,16 +92,16 @@ endforeach()
 set(_imgui_backend_targets "")
 set(_imgui_backend_headers "")
 foreach(_backend IN LISTS PKG_IMGUI_BACKENDS)
-    add_library(pkg_imgui_${_backend} STATIC
+    add_library(imgui_impl_${_backend} STATIC
         "${PKG_VENDOR_DIR}/imgui/backends/imgui_impl_${_backend}.cpp")
     # The core, PUBLIC, so the part compiles against the same headers a consumer
     # sees and a consumer who names only the backend still gets the core's library
     # and its include root. A part depends on the core and never on another part,
     # so nothing here can put two renderers on one link line.
-    target_link_libraries(pkg_imgui_${_backend} PUBLIC pkg_imgui)
-    pkg_alias_part(imgui ${_backend} pkg_imgui_${_backend})
+    target_link_libraries(imgui_impl_${_backend} PUBLIC imgui)
+    pkg_alias_part(imgui ${_backend} imgui_impl_${_backend})
 
-    list(APPEND _imgui_backend_targets pkg_imgui_${_backend})
+    list(APPEND _imgui_backend_targets imgui_impl_${_backend})
     list(APPEND _imgui_backend_headers
          "${PKG_VENDOR_DIR}/imgui/backends/imgui_impl_${_backend}.h")
 endforeach()
@@ -113,9 +120,9 @@ endforeach()
 # mean absent rather than uninstalled.
 file(GLOB _imgui_core_headers "${PKG_VENDOR_DIR}/imgui/*.h")
 pkg_stage(imgui
-    TARGET pkg_imgui
+    TARGET imgui
     EXTRA_TARGETS ${_imgui_backend_targets}
     HEADER_FILES ${_imgui_core_headers} ${_imgui_backend_headers}
     HEADERS_AT "misc/cpp=${PKG_VENDOR_DIR}/imgui/misc/cpp/imgui_stdlib.h"
 )
-pkg_alias(imgui pkg_imgui)
+pkg_alias(imgui imgui)
