@@ -129,6 +129,14 @@ jobs:
             fi
           done
 
+          # The hub's own installer, for a consumer who does not use CMake: it has
+          # to travel in the artifact, because the artifact is all a consumer gets.
+          # CMakeLists.txt copies it in, so an absent one means the copy broke.
+          if [ ! -f bin/Install.bat ]; then
+            echo "bin/Install.bat was not staged beside include/ and lib/" >&2
+            exit 1
+          fi
+
           # One job builds one column. A member that staged into another arch — or
           # into both — would hand out an artifact no consumer could trust, and the
           # failure would only surface later as a link error, so it is caught here.
@@ -187,8 +195,9 @@ jobs:
 
   # The layout promises one shared include/ tree beside a lib/ column per
   # (arch, config), so the published artifact should be that shape and not four
-  # separate archives. A flat merge would silently let one column's headers win,
-  # so the columns are compared first and the merge runs only if they agree.
+  # separate archives. A flat merge would silently let one column's copy win, so
+  # the columns are compared first - everything except lib/, which is the part
+  # that is meant to differ - and the merge runs only if they agree.
   publish:
     name: publish (pkg-bin)
     needs: hub
@@ -200,19 +209,23 @@ jobs:
           pattern: pkg-bin-*
           path: columns/
 
-      - name: Check the columns agree on the shared header tree
+      # A column's libraries are its own; everything else it stages is the hub's,
+      # shared by all four - the include/ tree and the installer beside it. The
+      # merge cannot tell the two apart, so the difference is taken here, where a
+      # failure names the column responsible.
+      - name: Check the columns agree on everything but lib/
         shell: bash
         run: |
           set -euo pipefail
 
           reference="$(ls -d columns/*/ | head -n1)"
           for column in columns/*/; do
-            if ! diff -r "${reference}include" "${column}include"; then
-              echo "${column} stages headers that differ from ${reference}" >&2
+            if ! diff -r --exclude=lib "${reference}" "${column}"; then
+              echo "${column} stages files that differ from ${reference}" >&2
               exit 1
             fi
           done
-          echo "all $(ls -d columns/*/ | wc -l) columns share one include/ tree"
+          echo "all $(ls -d columns/*/ | wc -l) columns share one include/ tree and one Install.bat"
 
           echo "--- columns to be published"
           find columns -name '*.lib' | sort
@@ -230,6 +243,11 @@ jobs:
   # So this job deliberately does not build the hub and does not clone vendor/:
   # checkout, unpack the published artifact, and use it. If that fails, the
   # artifact is not usable, however green the job that produced it was.
+  #
+  # It is used the two ways a consumer can: through the consumer project's own
+  # CMake, and - the half that needs no CMake at all - through the Install.bat
+  # that ships inside the artifact, which is what a Windows project that is not
+  # built by this hub's CMake reaches for.
   consume:
     name: consume (${{ matrix.arch }} ${{ matrix.config }})
     needs: publish
@@ -280,6 +298,10 @@ jobs:
             echo "vendor/ is $(find vendor -type d | wc -l) directories deep with no files"
           fi
 
+          # Install.bat leads this listing on purpose: it is the hub's own entry
+          # point, and what a consumer without CMake runs first.
+          echo "--- bin/"
+          ls bin
           echo "--- bin/include"
           ls bin/include
           echo "--- bin/lib"
@@ -312,3 +334,50 @@ jobs:
           for consumer in consumer_c consumer_net consumer_phnt consumer_cpp; do
             "./build/consumer/${{ matrix.config }}/${consumer}.exe"
           done
+
+      # The artifact's other way in, and the reason Install.bat exists: no CMake,
+      # no -I, no /LIBPATH. Install.bat does one thing - it works out that it is
+      # sitting in the hub and stores that path in PKG_DIR, in this shell and in
+      # the user's environment. Everything else is derived by whoever consumes
+      # it: the include roots and the column's libraries are read off PKG_DIR
+      # here, and cl.exe is expected to find them through those variables alone.
+      # Compile, link and run are the assertion; the consumer source is the same
+      # one the CMake step above compiles, which is what makes this a second way
+      # to the same contract rather than a second contract.
+      - name: Use the artifact through Install.bat, with no CMake in between
+        shell: cmd
+        run: |
+          set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
+          if not exist "%VSWHERE%" (echo vswhere.exe is missing 1>&2 & exit /b 1)
+          for /f "usebackq delims=" %%I in (`"%VSWHERE%" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSDIR=%%I"
+          if not defined VSDIR (echo no Visual Studio with the C++ toolchain was found 1>&2 & exit /b 1)
+
+          rem A dev shell first, so the SDK's own INCLUDE/LIB stay underneath
+          rem whatever the consumer builds from PKG_DIR.
+          call "%VSDIR%\VC\Auxiliary\Build\vcvarsall.bat" ${{ matrix.arch }} || exit /b 1
+
+          rem No arguments on purpose: the one job it has is to name the hub.
+          call "%CD%\bin\Install.bat" || exit /b 1
+
+          rem It has to outlive the shell that ran it: that is the whole point of
+          rem storing it, so the store is checked and not just the session.
+          reg query "HKCU\Environment" /v PKG_DIR >nul || (echo Install.bat did not store PKG_DIR 1>&2 & exit /b 1)
+
+          rem Everything else is read off PKG_DIR, the way any consumer without
+          rem CMake would: the include roots consumer_c.c includes, ahead of the
+          rem SDK's INCLUDE, and the column's libraries through LIB without
+          rem naming a single directory here. Globbing on purpose - the hub
+          rem renames libraries per config, and this probe should not have to
+          rem know that either.
+          set "PKG_INCLUDE=%PKG_DIR%\include"
+          set "INCLUDE=%PKG_INCLUDE%\zlib;%PKG_INCLUDE%\zstd;%PKG_INCLUDE%\lz4;%PKG_INCLUDE%\mbedtls;%PKG_INCLUDE%\quickjs;%PKG_INCLUDE%\stb;%INCLUDE%"
+          set "LIBS="
+          for %%F in ("%PKG_DIR%\lib\*\${{ matrix.arch }}\${{ matrix.config }}\*.lib") do call set "LIBS=%%LIBS%% "%%~F""
+
+          if not exist build mkdir build
+          rem /MTd under Debug and /MT under Release, the hub's static CRT (ADR-0006):
+          rem a mismatched runtime is LNK2038, which is the intended loud failure.
+          cl /nologo ${{ matrix.config == 'Debug' && '/MTd' || '/MT' }} /Fo:build\ /Fe:build\install-probe.exe "%CD%\tests\consumer\consumer_c.c" /link ws2_32.lib bcrypt.lib %LIBS% || exit /b 1
+
+          build\install-probe.exe || exit /b 1
+          echo Install.bat named the hub and cl.exe built and ran against it

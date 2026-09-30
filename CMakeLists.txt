@@ -39,6 +39,17 @@ set(PKG_BIN_DIR     "${CMAKE_CURRENT_SOURCE_DIR}/bin")
 set(PKG_INCLUDE_DIR "${PKG_BIN_DIR}/include")  # bin/include/<member>/  (that dir is the include root)
 set(PKG_LIB_DIR     "${PKG_BIN_DIR}/lib")      # bin/lib/<member>/<arch>/<config>/
 
+# The hub's own installer travels inside the hub: the copy at the repository root
+# is the source, and the one that matters sits in bin/ beside include/ and lib/,
+# which is where a consumer who unpacks the artifact finds it. Copied rather than
+# generated, so all four columns carry a byte-identical file — the published merge
+# is flat and would otherwise let one column's copy win silently.
+file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/Install.bat" DESTINATION "${PKG_BIN_DIR}")
+# Without this the copy above would keep being the old file until something else
+# re-configured, which is how a hub ends up shipping yesterday's search path.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+             "${CMAKE_CURRENT_SOURCE_DIR}/Install.bat")
+
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(PkgStage)
 

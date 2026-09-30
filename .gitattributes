@@ -1,0 +1,3 @@
+# Install.bat is a batch file: cmd.exe reads it, and it is written for CRLF
+# regardless of what a clone's core.autocrlf happens to be.
+Install.bat text eol=crlf
