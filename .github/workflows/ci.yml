@@ -143,6 +143,15 @@ jobs:
             fi
           done
 
+          # ...and the header of every backend of the default selection sits beside
+          # them, because a backend a consumer cannot name is a library it cannot use.
+          for backend in win32 dx9 dx10 dx11 dx12 opengl2 opengl3 null; do
+            if [ ! -f "bin/include/imgui/imgui_impl_${backend}.h" ]; then
+              echo "expected bin/include/imgui/imgui_impl_${backend}.h to be staged" >&2
+              exit 1
+            fi
+          done
+
           # ...and the implementation of those helpers stays out of it: it is inside
           # the core library, and staging it beside the header would invite a second
           # copy of it into a consumer's build.
@@ -204,6 +213,99 @@ jobs:
               exit 1
             fi
           done
+
+          # imgui is the first member that stages more than one library: its core
+          # beside a part per backend of the default selection. The loop above is
+          # satisfied by the core alone, so the parts are named here — a member that
+          # staged only some of them would pass that check and still hand out an
+          # artifact promising a part it does not carry. Matched on the name suffix
+          # each part's library carries rather than on a full file name, so this still
+          # does not have to know what the hub calls its libraries.
+          for backend in win32 dx9 dx10 dx11 dx12 opengl2 opengl3 null; do
+            if [ -z "$(find "bin/lib/imgui/$arch/$config" -name "*_${backend}.lib" -print -quit)" ]; then
+              echo "imgui staged no ${backend} backend library in ${arch}/${config}" >&2
+              exit 1
+            fi
+          done
+          echo "imgui staged its core and all eight SDK-only backends in ${arch}/${config}"
+
+      # The selection option is the one thing about imgui that a build cannot show:
+      # "not selected" means the backend is not a target at all, and a target that
+      # does not exist has no artifact to look at. So it is proven here instead, by
+      # configuring the hub with lists other than the default, into a build tree of
+      # its own, and asking what each configure produced. Nothing is compiled, so the
+      # check costs configures rather than a second build.
+      - name: Probe the imgui backend selection (configure only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          probe="build/probe-imgui-backends-${{ matrix.arch }}"
+          log="${probe}.log"
+          unknown_log="${probe}-unknown.log"
+
+          # Half one: the list narrowed to one backend. The selected backend is a
+          # target and the excluded one is not — in the Visual Studio generator that
+          # is a project file in the build tree. A fresh tree, so nothing this
+          # configure did not write can be mistaken for something it did.
+          rm -rf "$probe" "$log" "$unknown_log"
+          if ! cmake --preset probe-imgui-backends-${{ matrix.arch }} > "$log" 2>&1; then
+            echo "configuring with the probe preset failed" >&2
+            tail -n 40 "$log" >&2
+            exit 1
+          fi
+          if [ -z "$(find "$probe" -name 'pkg_imgui_win32.vcxproj' -print -quit)" ]; then
+            echo "PKG_IMGUI_BACKENDS=win32 produced no target for pkg_imgui_win32" >&2
+            exit 1
+          fi
+          if [ -n "$(find "$probe" -name 'pkg_imgui_dx11.vcxproj' -print -quit)" ]; then
+            echo "PKG_IMGUI_BACKENDS=win32 still produced a target for pkg_imgui_dx11" >&2
+            exit 1
+          fi
+          echo "narrowed selection: pkg_imgui_win32 is a target, pkg_imgui_dx11 is not"
+
+          # Half two: the empty list, which is the other end of the same promise —
+          # excluding every backend leaves the core on its own. A fresh tree again, so
+          # the check is on what this configure wrote and nothing else.
+          rm -rf "$probe"
+          if ! cmake --preset probe-imgui-backends-${{ matrix.arch }} \
+               -DPKG_IMGUI_BACKENDS= > "$log" 2>&1; then
+            echo "configuring with an empty PKG_IMGUI_BACKENDS failed" >&2
+            tail -n 40 "$log" >&2
+            exit 1
+          fi
+          if [ -z "$(find "$probe" -name 'pkg_imgui.vcxproj' -print -quit)" ]; then
+            echo "PKG_IMGUI_BACKENDS= produced no target for the imgui core" >&2
+            exit 1
+          fi
+          if [ -n "$(find "$probe" -name 'pkg_imgui_*.vcxproj' -print -quit)" ]; then
+            echo "PKG_IMGUI_BACKENDS= still produced a backend target" >&2
+            exit 1
+          fi
+          echo "empty selection: the core is a target and no backend is"
+
+          # Half three: a name that is not a backend stops the configure and prints
+          # the accepted set, the way the hub's other failures read. The same preset,
+          # its list overridden on the command line, so it is the same configure path.
+          if cmake --preset probe-imgui-backends-${{ matrix.arch }} \
+               -DPKG_IMGUI_BACKENDS=glfw > "$unknown_log" 2>&1; then
+            echo "PKG_IMGUI_BACKENDS=glfw configured successfully" >&2
+            exit 1
+          fi
+          # CMake wraps a long message to the output width, so the log is collapsed
+          # to one line before it is asked anything: where a line break fell is not
+          # part of what the hub promises to print.
+          failure="$(tr '\n' ' ' < "$unknown_log" | tr -s ' ')"
+          if ! printf '%s' "$failure" | grep -qF "PKG_IMGUI_BACKENDS names 'glfw'"; then
+            echo "the unknown-backend failure did not name the value it rejected" >&2
+            tail -n 40 "$unknown_log" >&2
+            exit 1
+          fi
+          if ! printf '%s' "$failure" | grep -q 'accepted backends:.*win32'; then
+            echo "the unknown-backend failure did not name the accepted set" >&2
+            tail -n 40 "$unknown_log" >&2
+            exit 1
+          fi
+          echo "unknown backend name: the configure failed and named the accepted set"
 
       # Short retention: these are the columns, published a moment later by the
       # `publish` job as the single artifact consumers are meant to take.

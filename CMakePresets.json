@@ -31,6 +31,26 @@
         "BUILD_STATIC_LIBS": "ON",
         "BUILD_TESTING": "OFF"
       }
+    },
+    {
+      "name": "probe-imgui-backends-x64",
+      "displayName": "imgui backend selection probe (x64)",
+      "description": "Configure only, never built: the hub with PKG_IMGUI_BACKENDS narrowed to one backend, so that 'not selected means absent' can be checked without paying for a second build. See the probe step in .github/workflows/ci.yml",
+      "inherits": "ci-x64",
+      "binaryDir": "${sourceDir}/build/probe-imgui-backends-x64",
+      "cacheVariables": {
+        "PKG_IMGUI_BACKENDS": "win32"
+      }
+    },
+    {
+      "name": "probe-imgui-backends-x86",
+      "displayName": "imgui backend selection probe (x86)",
+      "description": "The same probe in the 32-bit column: the option is read before any target exists, so it cannot depend on the architecture",
+      "inherits": "ci-x86",
+      "binaryDir": "${sourceDir}/build/probe-imgui-backends-x86",
+      "cacheVariables": {
+        "PKG_IMGUI_BACKENDS": "win32"
+      }
     }
   ],
   "buildPresets": [
