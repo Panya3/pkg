@@ -4,6 +4,9 @@ CLAUDE.md
 # decision records for local agent sessions — kept out of version control
 docs/adr/
 
+# specs for local agent sessions — kept out of version control
+docs/specs/
+
 # local build tree
 /build/
 
