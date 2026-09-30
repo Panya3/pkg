@@ -60,7 +60,7 @@ jobs:
             config: Release
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 1
           submodules: false
@@ -178,7 +178,7 @@ jobs:
       # Short retention: these are the columns, published a moment later by the
       # `publish` job as the single artifact consumers are meant to take.
       - name: Upload this column
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pkg-bin-${{ matrix.arch }}-${{ matrix.config }}
           path: bin/
@@ -195,7 +195,7 @@ jobs:
     runs-on: windows-2022
     steps:
       - name: Collect the columns
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: pkg-bin-*
           path: columns/
@@ -218,7 +218,7 @@ jobs:
           find columns -name '*.lib' | sort
 
       - name: Publish the hub as one artifact
-        uses: actions/upload-artifact/merge@v4
+        uses: actions/upload-artifact/merge@v7
         with:
           name: pkg-bin
           pattern: pkg-bin-*
@@ -252,13 +252,13 @@ jobs:
             config: Release
     steps:
       - name: Checkout (source only — no submodules)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 1
           submodules: false
 
       - name: Download the published artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: pkg-bin
           path: bin/
