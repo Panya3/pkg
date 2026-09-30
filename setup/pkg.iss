@@ -42,9 +42,9 @@ UninstallDisplayName=pkg (library hub)
 ; The whole artifact, as the publish job laid it out: include\, lib\ with all
 ; four columns, Install.bat at the root. recurse skips empty directories,
 ; which are not part of the contract — the consumer asserts on files.
-Source: "artifact\*"
-DestDir: "{app}"
-Flags: ignoreversion recursesubdirs uninsrestartdelete
+; One line, not three: Inno reads a [Files] entry per line, and splitting the
+; parameters across lines makes the first line an entry without a DestDir.
+Source: "artifact\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs uninsrestartdelete
 
 [Run]
 ; The one thing the artifact could not do for itself before someone pointed at
