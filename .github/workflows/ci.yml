@@ -455,6 +455,15 @@ jobs:
           rem there, and to name the folder the installer chose.
           reg query "HKCU\Environment" /v PKG_DIR | findstr /i /c:"%INSTALLDIR%" >nul || (echo PKG_DIR was not stored at the install folder 1>&2 & exit /b 1)
 
+          rem This step's shell started before setx wrote, so its own PKG_DIR is
+          rem empty - a value stored now reaches only shells opened later, which
+          rem is the whole point of storing it. Loading it here is what a fresh
+          rem consumer shell does by itself, and what the rest of this step runs
+          rem against. The consume job proves the session half of the contract;
+          rem this is the stored half.
+          for /f "tokens=2*" %%A in ('reg query "HKCU\Environment" /v PKG_DIR ^| findstr PKG_DIR') do set "PKG_DIR=%%B"
+          echo PKG_DIR is %PKG_DIR%
+
           rem A dev shell, then the installed hub - the same way consume uses the
           rem unpacked artifact, so this proves the setup.exe and not the runner.
           set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
