@@ -25,7 +25,10 @@ DisableProgramGroupPage=yes
 ; The user may reinstall the hub somewhere else; the dir page is how.
 DisableDirPage=no
 OutputBaseFilename=pkg-setup-{#pkgVersion}
-OutputDir=.
+; Paths in this script are resolved from the script's own folder, so the
+; compiled exe lands in the repository root — beside the artifact it wrapped,
+; which is where the CI step looks for it.
+OutputDir=..
 ; Per-user: the installer never elevates, and PrivilegesRequired=lowest is what
 ; makes {localappdata} the default without a UAC prompt.
 PrivilegesRequired=lowest
@@ -44,7 +47,9 @@ UninstallDisplayName=pkg (library hub)
 ; which are not part of the contract — the consumer asserts on files.
 ; One line, not three: Inno reads a [Files] entry per line, and splitting the
 ; parameters across lines makes the first line an entry without a DestDir.
-Source: "artifact\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs uninsrestartdelete
+; ..\ because Source is resolved from this script's folder, not the working
+; directory ISCC happened to be started in.
+Source: "..\artifact\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs uninsrestartdelete
 
 [Run]
 ; The one thing the artifact could not do for itself before someone pointed at
