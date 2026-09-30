@@ -109,8 +109,24 @@ jobs:
           echo "--- bin/lib"
           find bin/lib -type f | sort
 
-          for member in zlib zstd lz4 mbedtls curl quickjs json phnt stb \
-                        magic_enum nameof scope_guard semver yacppl imgui; do
+          # Which members exist is one statement, members.txt at the repository root,
+          # read by every check here and by the consumer project — so a member added to
+          # the hub is asserted everywhere at once, and one removed disappears from all
+          # of them rather than from all but one. The flag column marks the members that
+          # stage a library beside their headers.
+          # The carriage returns go first so the fields below are read the same way
+          # however the checkout spelled the file: the flag is the last field on its
+          # line, which is exactly where a CRLF line ending would land.
+          all_members="$(tr -d '\r' < members.txt | awk '!/^#/ && NF { print $1 }')"
+          library_members="$(tr -d '\r' < members.txt | awk '!/^#/ && $2 == "lib" { print $1 }')"
+          # An empty roster would make every loop below pass without checking anything,
+          # which is the one failure that must not be silent.
+          if [ -z "$all_members" ] || [ -z "$library_members" ]; then
+            echo "members.txt names no members (or no library members)" >&2
+            exit 1
+          fi
+
+          for member in $all_members; do
             if [ -z "$(ls -A "bin/include/$member" 2>/dev/null)" ]; then
               echo "no staged headers for $member" >&2
               exit 1
@@ -171,7 +187,7 @@ jobs:
           # One job builds one column. A member that staged into another arch — or
           # into both — would hand out an artifact no consumer could trust, and the
           # failure would only surface later as a link error, so it is caught here.
-          for member in zlib zstd lz4 mbedtls curl quickjs imgui; do
+          for member in $library_members; do
             staged="$(ls "bin/lib/$member" 2>/dev/null || true)"
             if [ "$staged" != "$arch" ]; then
               echo "bin/lib/$member stages '$staged', expected the '$arch' column" >&2
@@ -207,7 +223,7 @@ jobs:
           grep -rho '<RuntimeLibrary>[^<]*</RuntimeLibrary>' "build/${{ matrix.configure }}" \
             --include='*.vcxproj' | sort | uniq -c || true
 
-          for member in zlib zstd lz4 mbedtls curl quickjs imgui; do
+          for member in $library_members; do
             if [ -z "$(find "bin/lib/$member/$arch" -path "*/${config}/*.lib" -print -quit)" ]; then
               echo "no ${config} ${arch} library staged for $member" >&2
               exit 1
@@ -565,12 +581,26 @@ jobs:
 
           rem The tree, not a spot check: everything the artifact had is here.
           if not exist "%INSTALLDIR%\Install.bat" (echo the installer dropped Install.bat 1>&2 & exit /b 1)
-          for %%M in (zlib zstd lz4 mbedtls curl quickjs json phnt stb magic_enum nameof scope_guard semver yacppl imgui) do (
-            if not exist "%INSTALLDIR%\include\%%M" (echo the installer dropped include\%%M 1>&2 & exit /b 1)
+          rem The roster is members.txt, the same file the hub job and the consumer
+          rem project read, so the installer is checked against the members the hub
+          rem says exist rather than against a list kept here. Every miss is named
+          rem rather than the first one, and the step fails once, after the loop: an
+          rem "exit /b" inside a block whose next statement is another "if" leaves cmd
+          rem reporting success, which would print the failure and pass the step.
+          if not exist members.txt (echo no member roster at members.txt 1>&2 & exit /b 1)
+          set "roster_members=0"
+          set "roster_missing=0"
+          for /f "usebackq tokens=1,2" %%A in ("members.txt") do (
+            if not "%%A"=="#" (
+              set /a roster_members+=1
+              if not exist "%INSTALLDIR%\include\%%A" (echo the installer dropped include\%%A 1>&2 & set /a roster_missing+=1)
+              if "%%B"=="lib" if not exist "%INSTALLDIR%\lib\%%A\x64\Debug\*.lib" (echo the installer dropped lib\%%A x64 Debug 1>&2 & set /a roster_missing+=1)
+            )
           )
-          for %%M in (zlib zstd lz4 mbedtls curl quickjs imgui) do (
-            if not exist "%INSTALLDIR%\lib\%%M\x64\Debug\*.lib" (echo the installer dropped lib\%%M x64 Debug 1>&2 & exit /b 1)
-          )
+          rem A roster naming no members would leave every check here having read nothing,
+          rem and would report success — the one failure that must not be silent.
+          if "%roster_members%"=="0" (echo members.txt names no members 1>&2 & exit /b 1)
+          if not "%roster_missing%"=="0" (echo the installed tree is missing %roster_missing% of the paths members.txt names 1>&2 & exit /b 1)
 
           rem Install.bat ran as the last setup step: the stored value has to be
           rem there, and to name the folder the installer chose.

@@ -1,7 +1,10 @@
 # Consumer smoke test.
 #
 # This project deliberately imports NOTHING from the hub's own CMake: it reads the
-# staged output under bin/ the way another project would. It is configured and
+# staged output under bin/ the way another project would. One thing it does share with
+# the hub is members.txt, the roster of which members exist (see the roster below):
+# the project promises the artifact carries every member, so it cannot keep its own
+# list of them and still be able to disagree with the artifact. It is configured and
 # built after the hub, and what it proves is the contract the hub hands out:
 #
 #   * every member stages the headers it promises, under an include root that
@@ -70,16 +73,78 @@ if(NOT IS_DIRECTORY "${PKG_INCLUDE_DIR}")
     message(FATAL_ERROR "pkg_consumer: '${PKG_INCLUDE_DIR}' does not exist — build the hub first")
 endif()
 
-# Every member the hub promises, and which of them must ship a library.
-set(PKG_MEMBERS
-    zlib zstd lz4 mbedtls curl quickjs
-    json phnt stb magic_enum nameof scope_guard semver yacppl imgui
-)
-set(PKG_LIBRARY_MEMBERS zlib zstd lz4 mbedtls curl quickjs imgui)
+# Every member the hub promises, and which of them must ship a library — read from the
+# hub's roster rather than kept a second time here, because a list this project kept
+# itself could promise a member the artifact does not carry, and a member added to the
+# hub would be promised by nobody until someone remembered this file. members.txt is
+# the same file the workflow's staged-tree and installer checks read, so all of them
+# move together. PKG_MEMBERS_FILE names a different roster for a consumer that keeps
+# one of its own; the format is one member per line, `lib` marking the ones that stage
+# a library beside their headers.
+if(NOT PKG_MEMBERS_FILE)
+    set(PKG_MEMBERS_FILE "${CMAKE_CURRENT_LIST_DIR}/../../members.txt")
+endif()
+if(NOT EXISTS "${PKG_MEMBERS_FILE}")
+    message(FATAL_ERROR "pkg_consumer: no member roster at '${PKG_MEMBERS_FILE}'")
+endif()
+
+set(PKG_MEMBERS "")
+set(PKG_LIBRARY_MEMBERS "")
+# Read rather than file(STRINGS): that command rewrites the lines it decides are not
+# plain text, and a comment carrying a dash — like this one — is one of them, arriving
+# split in two with the dash gone, which is a roster entry nobody wrote. A CMake list is
+# semicolon-separated as well, so the file's own semicolons are escaped until the lines
+# have been separated: a comment is otherwise enough to invent a member.
+file(READ "${PKG_MEMBERS_FILE}" _roster_text)
+string(REPLACE "\r\n" "\n" _roster_text "${_roster_text}")
+string(REPLACE ";" "\\;" _roster_text "${_roster_text}")
+string(REPLACE "\n" ";" _roster_lines "${_roster_text}")
+foreach(_line IN LISTS _roster_lines)
+    string(REPLACE "\\;" ";" _line "${_line}")
+    # Comment and blank lines carry no member; the whitespace between a name and its
+    # flag is alignment, so it is collapsed before the line is split.
+    string(STRIP "${_line}" _line)
+    if(_line STREQUAL "" OR _line MATCHES "^#")
+        continue()
+    endif()
+    string(REGEX REPLACE "[ \t]+" " " _line "${_line}")
+    string(REPLACE " " ";" _fields "${_line}")
+    list(GET _fields 0 _member)
+    list(APPEND PKG_MEMBERS "${_member}")
+    list(LENGTH _fields _field_count)
+    if(_field_count GREATER 1)
+        list(GET _fields 1 _flag)
+        if(NOT _flag STREQUAL "lib")
+            message(FATAL_ERROR
+                "pkg_consumer: member '${_member}' carries unknown flag '${_flag}' in "
+                "${PKG_MEMBERS_FILE}; the roster names a member and, for the ones that "
+                "stage a library, 'lib'")
+        endif()
+        list(APPEND PKG_LIBRARY_MEMBERS "${_member}")
+    endif()
+endforeach()
+
+# A roster that names nothing reads as every check passing, which is the one failure
+# this project must not have: it exists to be the thing that notices a missing member.
+if(NOT PKG_MEMBERS)
+    message(FATAL_ERROR "pkg_consumer: '${PKG_MEMBERS_FILE}' names no members")
+endif()
 
 foreach(_member IN LISTS PKG_MEMBERS)
     if(NOT IS_DIRECTORY "${PKG_INCLUDE_DIR}/${_member}")
         message(FATAL_ERROR "pkg_consumer: no staged headers for '${_member}' under ${PKG_INCLUDE_DIR}")
+    endif()
+endforeach()
+
+# The same promise for the half of the roster that ships one: a member the hub says
+# stages a library has to have staged one in the column being consumed, whether or not
+# any program below happens to link it.
+foreach(_member IN LISTS PKG_LIBRARY_MEMBERS)
+    file(GLOB _staged "${PKG_LIB_DIR}/${_member}/${PKG_ARCH}/${PKG_CONFIG}/*.lib")
+    if(NOT _staged)
+        message(FATAL_ERROR
+            "pkg_consumer: '${_member}' stages a library, and "
+            "${PKG_LIB_DIR}/${_member}/${PKG_ARCH}/${PKG_CONFIG} holds none")
     endif()
 endforeach()
 
