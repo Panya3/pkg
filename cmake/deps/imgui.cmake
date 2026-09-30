@@ -7,6 +7,11 @@
 # backends want a third-party library the hub does not vendor, so nothing here
 # bundles them together.
 #
+# Which backends exist is a configure-time decision: they are alternatives a
+# consumer picks — one platform, one renderer — so a build pays only for the ones it
+# names. Every backend in the table below reaches no further than the Windows SDK,
+# which is why the hub can stage all of them in the published artifact.
+#
 # Those .vcxproj files are also where the member's include shape comes from: they
 # put the repository root *and* `backends/` on the include path, which is why the
 # member's include root is flat for the core and for each selected backend.
@@ -42,15 +47,75 @@ if(MSVC)
     target_compile_options(pkg_imgui PRIVATE /utf-8)
 endif()
 
-# Core headers flat in the include root, and the std::string helper's header at the
-# subpath upstream documents it at. The header alone, not misc/cpp with it: the
-# implementation is inside the core library already, and staging it beside the
-# header would invite a consumer to compile a second copy of it — which is exactly
-# what upstream's own note in that file tells them to do.
+# The backends the hub knows how to build, and the single place that says so. Each
+# name is spelled the way upstream spells the file — backends/imgui_impl_<name>.cpp
+# beside its header — and each one's dependencies stop at the Windows SDK, which is
+# the only reason the hub can build it for someone else. win32 is the platform
+# backend, the DirectX and OpenGL ones are renderers, and null is both halves at
+# once: a consumer takes a platform and a renderer from this set.
+#
+# A backend that needs a library the hub does not vendor is not in this table at
+# all: GLFW, SDL2, SDL3, Vulkan, WebGPU, Allegro, GLUT, and the platform backends of
+# Android, Apple, OSX and QNX. While such a library is not a member, "unavailable"
+# is the honest answer — a name the hub cannot build is a configure error rather
+# than a library that quietly is not there.
+set(_imgui_backends win32 dx9 dx10 dx11 dx12 opengl2 opengl3 null)
+
+# Which of them this build stages. Read, and checked, before a single target exists
+# for them: a backend left out is not a target at all, so nothing is compiled and
+# nothing is staged for it — "not selected" means absent, not merely uninstalled.
+# The default is the whole table: every backend the hub can build reaches no further
+# than the Windows SDK, so a build with no option set stages all of them.
+set(PKG_IMGUI_BACKENDS "${_imgui_backends}" CACHE STRING
+    "imgui backends to stage, semicolon-separated; every backend whose dependencies stop at the Windows SDK (cmake/deps/imgui.cmake lists them)")
+
+foreach(_backend IN LISTS PKG_IMGUI_BACKENDS)
+    if(NOT _backend IN_LIST _imgui_backends)
+        string(REPLACE ";" " " _accepted "${_imgui_backends}")
+        message(FATAL_ERROR
+            "pkg: PKG_IMGUI_BACKENDS names '${_backend}', which is not an imgui backend; "
+            "accepted backends: ${_accepted}")
+    endif()
+endforeach()
+
+# One target per selected backend, each a part of this member rather than a member
+# of its own: the alias is published for whoever spells it, and it is deliberately
+# not added to the hub's aggregate, because a backend is an alternative a consumer
+# picks — one platform, one renderer — and not an addition everyone receives.
+set(_imgui_backend_targets "")
+set(_imgui_backend_headers "")
+foreach(_backend IN LISTS PKG_IMGUI_BACKENDS)
+    add_library(pkg_imgui_${_backend} STATIC
+        "${PKG_VENDOR_DIR}/imgui/backends/imgui_impl_${_backend}.cpp")
+    # The core, PUBLIC, so the part compiles against the same headers a consumer
+    # sees and a consumer who names only the backend still gets the core's library
+    # and its include root. A part depends on the core and never on another part,
+    # so nothing here can put two renderers on one link line.
+    target_link_libraries(pkg_imgui_${_backend} PUBLIC pkg_imgui)
+    pkg_alias_part(imgui ${_backend} pkg_imgui_${_backend})
+
+    list(APPEND _imgui_backend_targets pkg_imgui_${_backend})
+    list(APPEND _imgui_backend_headers
+         "${PKG_VENDOR_DIR}/imgui/backends/imgui_impl_${_backend}.h")
+endforeach()
+
+# Core headers flat in the include root, each backend's header beside them, and the
+# std::string helper's header at the subpath upstream documents it at. The header
+# alone, not misc/cpp with it: the implementation is inside the core library
+# already, and staging it beside the header would invite a consumer to compile a
+# second copy of it — which is exactly what upstream's own note in that file tells
+# them to do.
+#
+# The backends go through EXTRA_TARGETS rather than a staging call of their own:
+# a part's library belongs in the member's library directory, beside the core,
+# because that is the directory a consumer reads. Nothing is staged for a backend
+# that was never created, which is what makes the selection option's "not selected"
+# mean absent rather than uninstalled.
 file(GLOB _imgui_core_headers "${PKG_VENDOR_DIR}/imgui/*.h")
 pkg_stage(imgui
     TARGET pkg_imgui
-    HEADER_FILES ${_imgui_core_headers}
+    EXTRA_TARGETS ${_imgui_backend_targets}
+    HEADER_FILES ${_imgui_core_headers} ${_imgui_backend_headers}
     HEADERS_AT "misc/cpp=${PKG_VENDOR_DIR}/imgui/misc/cpp/imgui_stdlib.h"
 )
 pkg_alias(imgui pkg_imgui)
