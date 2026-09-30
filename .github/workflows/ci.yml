@@ -282,8 +282,8 @@ jobs:
 
           echo "--- bin/include"
           ls bin/include
-          echo "--- bin/lib/${{ matrix.arch }}/${{ matrix.config }}"
-          find "bin/lib/${{ matrix.arch }}/${{ matrix.config }}" -name '*.lib' | sort
+          echo "--- bin/lib"
+          find bin/lib -name '*.lib' | sort
 
           # The published artifact is the whole hub, so every column has to be in
           # it — checked through one member that stages libraries in all of them.
