@@ -61,10 +61,30 @@ short() { printf '%.10s' "$1"; }
 # mbedtls-4.2.0, and three projects publish no tags at all ('-': stb, yacppl,
 # luajit — their pins are branch commits, which is why the pin question is asked per
 # member instead of assumed).
+#
+# imgui is the one whose tags are ambiguous: it ships two lines from a single
+# repository, and their tags differ only by a suffix — v1.92.9b against
+# v1.92.9b-docking. `sort -V` orders the -docking tags last, so a pattern matching
+# both of them is a pattern that lets `--latest` step across lines without anyone
+# asking it to. The pattern is therefore the line the member is pinned to, read off
+# the tag at that pin: a member on the docking line is offered docking tags, a member
+# on the stable line stable ones. Moving the pin to the other line is unaffected —
+# that is done by naming the ref, and goes through no pattern at all.
+#
+# A pin that is not a tag leaves that line unreadable, and '?' then says so out loud:
+# the newest-tag shortcut offers nothing and `--latest` refuses, because picking a
+# line to offer would be exactly the silent crossing this exists to prevent.
 tag_pattern() {
     case "$1" in
         vendor/curl) echo '^curl-[0-9]' ;;
         vendor/mbedtls) echo '^mbedtls-[0-9]' ;;
+        vendor/imgui)
+            case "$(tag_at_pin "$1")" in
+                *-docking) echo '^v[0-9].*-docking$' ;;
+                v[0-9]*) echo '^v[0-9][^-]*$' ;;
+                *) echo '?' ;;
+            esac
+            ;;
         vendor/stb | vendor/neargye/yacppl | vendor/luajit) echo '-' ;;
         *) echo '^v[0-9]' ;;
     esac
@@ -79,15 +99,22 @@ tag_names() {
 newest_tags() { # <path> [count]
     local pattern
     pattern="$(tag_pattern "$1")"
-    [ "$pattern" = '-' ] && return 0
+    # '-' is an upstream that publishes no tags, '?' a member whose line cannot be
+    # read (see tag_pattern): neither has tags to offer.
+    case "$pattern" in '-' | '?') return 0 ;; esac
     tag_names "$1" | grep -E "$pattern" | sort -V | tail -n "${2:-3}"
 }
 
+# The tag a member's pin sits on, if it sits on one. An annotated tag is listed twice
+# on the remote — as itself and as the commit it peels to — and a submodule can only
+# ever record a commit, so the peeled line is the one that can match a pin. Stripping
+# that suffix instead of dropping the line is what makes this answer for annotated
+# tags, which is what most upstreams here use.
 tag_at_pin() {
     local sha
     sha="$(pin_of "$1")"
     remote_tags "$1" | awk -v s="$sha" '$1 == s {print $2}' |
-        sed 's|refs/tags/||' | grep -v '\^{}$' | head -n1 || true
+        sed -e 's|refs/tags/||' -e 's|\^{}$||' | head -n1 || true
 }
 
 default_branch() {
@@ -133,11 +160,11 @@ report() {
     local path tag newest
     for path in $(members); do
         tag="$(tag_at_pin "$path")"
-        if [ "$(tag_pattern "$path")" = '-' ]; then
-            newest="(no tags — default branch: $(default_branch "$path"))"
-        else
-            newest="$(newest_tags "$path" 3 | tr '\n' ' ')"
-        fi
+        case "$(tag_pattern "$path")" in
+            '-') newest="(no tags — default branch: $(default_branch "$path"))" ;;
+            '?') newest="(pin is not a release tag, so its line is unreadable — name a ref)" ;;
+            *) newest="$(newest_tags "$path" 3 | tr '\n' ' ')" ;;
+        esac
         printf '%-30s %-11s %-16s %s\n' "$path" "$(short "$(pin_of "$path")")" "${tag:--}" "$newest"
     done
 }
@@ -207,15 +234,22 @@ move() { # <path> <ref>
 latest_ref() { # <path>
     local path="$1" pattern newest branch
     pattern="$(tag_pattern "$path")"
-    if [ "$pattern" = '-' ]; then
-        branch="$(default_branch "$path")"
-        if [ -z "$branch" ]; then
-            echo "update-vendor: cannot read the default branch of $path" >&2
+    case "$pattern" in
+        '-')
+            branch="$(default_branch "$path")"
+            if [ -z "$branch" ]; then
+                echo "update-vendor: cannot read the default branch of $path" >&2
+                return 1
+            fi
+            echo "$branch"
+            return 0
+            ;;
+        '?')
+            echo "update-vendor: $path is not pinned to a release tag, so the line it is" >&2
+            echo "  on cannot be read — name the ref to move it to instead of --latest" >&2
             return 1
-        fi
-        echo "$branch"
-        return 0
-    fi
+            ;;
+    esac
     newest="$(newest_tags "$path" 1)"
     if [ -z "$newest" ]; then
         echo "update-vendor: no tag matching $pattern upstream for $path" >&2
