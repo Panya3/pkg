@@ -73,10 +73,10 @@ begin
   Result := False;
   if not RegQueryStringValue(HKCU, 'Environment', 'PKG_DIR', StoredPath) then
     Exit;
-  StoredPath := Lowercase(TrimRight(StoredPath, '\'));
-  InstallPath := Lowercase(TrimRight(ExpandConstant('{app}'), '\'));
+  StoredPath := Lowercase(RemoveBackslashUnlessRoot(StoredPath));
+  InstallPath := Lowercase(RemoveBackslashUnlessRoot(ExpandConstant('{app}')));
   Result := (StoredPath = InstallPath) or
-            (Pos(InstallPath + '\', StoredPath + '\') = 1);
+            (Pos(AddBackslash(InstallPath), StoredPath) = 1);
 end;
 
 // UninstallDelete removes files; PKG_DIR lives in the registry and must go the
