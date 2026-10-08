@@ -21,15 +21,17 @@ set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build static libraries only" FORCE)
 set(BUILD_STATIC_LIBS ON  CACHE BOOL "Build static libraries" FORCE)
 set(BUILD_TESTING     OFF CACHE BOOL "Never build a vendor's tests" FORCE)
 
-# Static CRT: /MT for release-style configs, /MTd for Debug. Static libraries are
-# only half of "self-contained" — the runtime they link is the other half, and a
-# consumer built with /MD cannot mix with these. See docs/adr/0006.
-set(_pkg_msvc_runtime_library "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+# Dynamic CRT: /MD for Release, /MDd for Debug (MultiThreadedDLL / MultiThreadedDebugDLL).
+set(_pkg_msvc_runtime_library "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
 set(CMAKE_MSVC_RUNTIME_LIBRARY "${_pkg_msvc_runtime_library}"
-    CACHE STRING "MSVC runtime library (static CRT)" FORCE)
+    CACHE STRING "MSVC runtime library (dynamic CRT)" FORCE)
 # The cache entry alone can be shadowed in some generator paths, so bind it in
 # this scope too: subdirectories inherit it and read it when creating targets.
 set(CMAKE_MSVC_RUNTIME_LIBRARY "${_pkg_msvc_runtime_library}")
+
+if(MSVC)
+    add_compile_options(/MP)
+endif()
 
 # ---------------------------------------------------------------------------
 # Layout of the staged hub

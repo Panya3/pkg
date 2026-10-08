@@ -95,7 +95,7 @@ jobs:
         run: cmake --preset ${{ matrix.configure }}
 
       - name: Build
-        run: cmake --build --preset ${{ matrix.build }}
+        run: cmake --build --preset ${{ matrix.build }} --parallel
 
       - name: Assert the staged hub is complete and signed off
         shell: bash
@@ -195,29 +195,29 @@ jobs:
             fi
           done
 
-          # The static CRT is a deliberate choice, not a default (docs/adr/0006):
-          # every staged library must carry the static runtime marker and none may
-          # carry the dynamic one. This is read out of the artifacts themselves, so
+          # The dynamic CRT is a deliberate choice, not a default:
+          # every staged library must carry the dynamic runtime marker and none may
+          # carry the static one. This is read out of the artifacts themselves, so
           # a member quietly switching runtimes cannot slip through.
           case "$config" in
-            Debug)   want_static="LIBCMTD" ;;
-            Release) want_static="LIBCMT" ;;
+            Debug)   want_dynamic="MSVCRTD" ;;
+            Release) want_dynamic="MSVCRT" ;;
           esac
-          static_crt_libraries=0
+          dynamic_crt_libraries=0
           for library in $(find bin/lib -path "*/${arch}/*" -name '*.lib'); do
-            if grep -aq "$want_static" "$library"; then
-              static_crt_libraries=$((static_crt_libraries + 1))
+            if grep -aq "$want_dynamic" "$library"; then
+              dynamic_crt_libraries=$((dynamic_crt_libraries + 1))
             fi
-            if grep -aq 'MSVCRT' "$library"; then
-              echo "$library links the dynamic CRT, expected $want_static" >&2
+            if grep -aq 'LIBCMT' "$library"; then
+              echo "$library links the static CRT, expected $want_dynamic" >&2
               exit 1
             fi
           done
-          if [ "$static_crt_libraries" -eq 0 ]; then
-            echo "no staged library links the static CRT ($want_static)" >&2
+          if [ "$dynamic_crt_libraries" -eq 0 ]; then
+            echo "no staged library links the dynamic CRT ($want_dynamic)" >&2
             exit 1
           fi
-          echo "static CRT ($want_static) confirmed in $static_crt_libraries staged libraries"
+          echo "dynamic CRT ($want_dynamic) confirmed in $dynamic_crt_libraries staged libraries"
 
           echo "--- generated runtime settings"
           grep -rho '<RuntimeLibrary>[^<]*</RuntimeLibrary>' "build/${{ matrix.configure }}" \
@@ -469,7 +469,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cmake --build build/consumer --config ${{ matrix.config }}
+          cmake --build build/consumer --config ${{ matrix.config }} --parallel
 
           for consumer in consumer_c consumer_net consumer_phnt consumer_cpp consumer_imgui consumer_yara; do
             "./build/consumer/${{ matrix.config }}/${consumer}.exe"
@@ -517,9 +517,9 @@ jobs:
           if not defined LIBS (echo no staged libraries under PKG_DIR for ${{ matrix.arch }} ${{ matrix.config }} 1>&2 & exit /b 1)
 
           if not exist build mkdir build
-          rem /MTd under Debug and /MT under Release, the hub's static CRT (ADR-0006):
+          rem /MDd under Debug and /MD under Release, the hub's dynamic CRT:
           rem a mismatched runtime is LNK2038, which is the intended loud failure.
-          cl /nologo ${{ matrix.config == 'Debug' && '/MTd' || '/MT' }} /Fo:build\ /Fe:build\install-probe.exe "%CD%\tests\consumer\consumer_c.c" /link ws2_32.lib bcrypt.lib %LIBS% || exit /b 1
+          cl /nologo ${{ matrix.config == 'Debug' && '/MDd' || '/MD' }} /Fo:build\ /Fe:build\install-probe.exe "%CD%\tests\consumer\consumer_c.c" /link ws2_32.lib bcrypt.lib %LIBS% || exit /b 1
 
           build\install-probe.exe || exit /b 1
           echo Install.bat named the hub and cl.exe built and ran against it
@@ -633,7 +633,7 @@ jobs:
           if not defined LIBS (echo no staged libraries under PKG_DIR 1>&2 & exit /b 1)
 
           if not exist build mkdir build
-          cl /nologo /MTd /Fo:build\ /Fe:build\setup-probe.exe "%CD%\tests\consumer\consumer_c.c" /link ws2_32.lib bcrypt.lib %LIBS% || exit /b 1
+          cl /nologo /MDd /Fo:build\ /Fe:build\setup-probe.exe "%CD%\tests\consumer\consumer_c.c" /link ws2_32.lib bcrypt.lib %LIBS% || exit /b 1
           build\setup-probe.exe || exit /b 1
 
           rem --- the uninstall, and what it must leave behind ---

@@ -6,7 +6,7 @@
 set(BUILD_CURL_EXE       OFF CACHE BOOL "" FORCE)
 set(CURL_DISABLE_INSTALL ON  CACHE BOOL "" FORCE)
 # Ask curl for the static CRT in its own words too; it appends -MT/-MTd itself.
-set(CURL_STATIC_CRT      ON  CACHE BOOL "" FORCE)
+set(CURL_STATIC_CRT      OFF CACHE BOOL "" FORCE)
 set(CURL_DISABLE_LDAP    ON  CACHE BOOL "" FORCE)
 
 # Anything that would trigger find_package(... REQUIRED) for a library we are not
