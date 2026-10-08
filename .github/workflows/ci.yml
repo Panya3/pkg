@@ -471,7 +471,7 @@ jobs:
           set -euo pipefail
           cmake --build build/consumer --config ${{ matrix.config }}
 
-          for consumer in consumer_c consumer_net consumer_phnt consumer_cpp consumer_imgui; do
+          for consumer in consumer_c consumer_net consumer_phnt consumer_cpp consumer_imgui consumer_yara; do
             "./build/consumer/${{ matrix.config }}/${consumer}.exe"
           done
 

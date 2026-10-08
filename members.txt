@@ -30,3 +30,4 @@ scope_guard
 semver
 yacppl
 imgui       lib
+yara        lib

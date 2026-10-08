@@ -218,3 +218,9 @@ pkg_consumer_link(consumer_imgui imgui)
 # renderers staged beside these need no entry: nothing here refers to them, so
 # none of theirs is taken out of the archive and none of them is linked in.
 target_link_libraries(consumer_imgui PRIVATE user32 gdi32 d3d11 dxgi d3dcompiler)
+
+# --- C++ side: yara (a member that stages libraries) ------------------------
+add_executable(consumer_yara consumer_yara.cpp)
+target_include_directories(consumer_yara PRIVATE "${PKG_INCLUDE_DIR}/yara")
+pkg_consumer_link(consumer_yara yara)
+target_link_libraries(consumer_yara PRIVATE advapi32)

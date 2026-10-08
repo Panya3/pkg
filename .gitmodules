@@ -49,3 +49,6 @@
 [submodule "vendor/imgui"]
 	path = vendor/imgui
 	url = https://github.com/ocornut/imgui.git
+[submodule "vendor/yara"]
+	path = vendor/yara
+	url = https://github.com/VirusTotal/yara.git
