@@ -1,0 +1,32 @@
+# The hub's members, one per line: the single statement of which members exist.
+#
+# Everything that enumerates members reads this file — the workflow's header roster,
+# its per-column library checks and its installer check, and the consumer project's
+# roster — so a member added here is asserted everywhere at once, and a member removed
+# here disappears from every check rather than from all but one.
+#
+#   <name>        the member stages headers under bin/include/<name>
+#   <name> lib    ...and a library under bin/lib/<name>/<arch>/<config>
+#
+# The name is the one the staged tree carries, which is not always the directory under
+# vendor/ that produces it: the five members under vendor/neargye/ are staged under
+# their own names, and all five come from one glue file. Which file builds a member is
+# a build detail, so it lives in CMakeLists.txt and cmake/deps/, never here.
+#
+# phnt is a member with no library because it is headers under a system SDK's own
+# names; stb and the near-gye ones because they are header-only by design.
+zlib        lib
+zstd        lib
+lz4         lib
+mbedtls     lib
+curl        lib
+quickjs     lib
+json
+phnt
+stb
+magic_enum
+nameof
+scope_guard
+semver
+yacppl
+imgui       lib

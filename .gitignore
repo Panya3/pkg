@@ -1,0 +1,14 @@
+# local agent instructions — kept out of version control
+CLAUDE.md
+
+# decision records for local agent sessions — kept out of version control
+docs/adr/
+
+# specs for local agent sessions — kept out of version control
+docs/specs/
+
+# local build tree
+/build/
+
+# staged hub artifacts (produced by the CMake harness, uploaded by CI)
+/bin/

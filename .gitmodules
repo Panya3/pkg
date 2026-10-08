@@ -1,0 +1,51 @@
+[submodule "vendor/curl"]
+	path = vendor/curl
+	url = https://github.com/curl/curl.git
+[submodule "vendor/neargye/scope_guard"]
+	path = vendor/neargye/scope_guard
+	url = https://github.com/Neargye/scope_guard
+[submodule "vendor/neargye/magic_enum"]
+	path = vendor/neargye/magic_enum
+	url = https://github.com/Neargye/magic_enum
+[submodule "vendor/neargye/nameof"]
+	path = vendor/neargye/nameof
+	url = https://github.com/Neargye/nameof
+[submodule "vendor/neargye/semver"]
+	path = vendor/neargye/semver
+	url = https://github.com/Neargye/semver
+[submodule "vendor/neargye/yacppl"]
+	path = vendor/neargye/yacppl
+	url = https://github.com/Neargye/yacppl
+[submodule "vendor/systeminformer"]
+	path = vendor/systeminformer
+	url = https://github.com/winsiderss/systeminformer.git
+[submodule "vendor/stb"]
+	path = vendor/stb
+	url = https://github.com/nothings/stb
+[submodule "vendor/json"]
+	path = vendor/json
+	url = https://github.com/nlohmann/json.git
+[submodule "vendor/luajit"]
+	path = vendor/luajit
+	url = https://github.com/luajit/luajit
+[submodule "vendor/quickjs"]
+	path = vendor/quickjs
+	url = https://github.com/quickjs-ng/quickjs
+[submodule "vendor/detours"]
+	path = vendor/detours
+	url = https://github.com/microsoft/Detours
+[submodule "vendor/mbedtls"]
+	path = vendor/mbedtls
+	url = https://github.com/Mbed-TLS/mbedtls
+[submodule "vendor/zlib"]
+	path = vendor/zlib
+	url = https://github.com/madler/zlib
+[submodule "vendor/zstd"]
+	path = vendor/zstd
+	url = https://github.com/facebook/zstd
+[submodule "vendor/lz4"]
+	path = vendor/lz4
+	url = https://github.com/lz4/lz4
+[submodule "vendor/imgui"]
+	path = vendor/imgui
+	url = https://github.com/ocornut/imgui.git

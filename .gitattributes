@@ -1,0 +1,10 @@
+# Install.bat is a batch file: cmd.exe reads it, and it is written for CRLF
+# regardless of what a clone's core.autocrlf happens to be.
+Install.bat text eol=crlf
+
+# members.txt is read a line at a time by three different readers — the workflow's
+# shell, the consumer project's CMake, and the installer check's cmd — and a
+# carriage return would end up inside the last field of a line for two of them.
+# Any clone with core.autocrlf set would hand it out as CRLF, so it is pinned the
+# other way round: it is data, and all three readers take LF.
+members.txt text eol=lf
