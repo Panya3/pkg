@@ -31,3 +31,4 @@ semver
 yacppl
 imgui       lib
 yara        lib
+frida       lib

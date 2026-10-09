@@ -82,6 +82,7 @@ include(cmake/deps/phnt.cmake)
 include(cmake/deps/stb.cmake)
 include(cmake/deps/imgui.cmake)
 include(cmake/deps/yara.cmake)
+include(cmake/deps/frida.cmake)
 
 # ---------------------------------------------------------------------------
 # The hub's surface

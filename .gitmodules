@@ -52,6 +52,3 @@
 [submodule "vendor/yara"]
 	path = vendor/yara
 	url = https://github.com/VirusTotal/yara.git
-[submodule "vendor/frida"]
-	path = vendor/frida
-	url = https://github.com/frida/frida.git

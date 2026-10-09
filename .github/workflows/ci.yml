@@ -200,6 +200,11 @@ jobs:
             exit 1
           fi
 
+          if [ ! -f "bin/include/frida/frida-core.h" ]; then
+            echo "expected bin/include/frida/frida-core.h to be staged" >&2
+            exit 1
+          fi
+
           # The hub's own installer, for a consumer who does not use CMake: it has
           # to travel in the artifact, because the artifact is all a consumer gets.
           # CMakeLists.txt copies it in, so an absent one means the copy broke.
