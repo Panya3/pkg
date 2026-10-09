@@ -29,8 +29,11 @@ set(CMAKE_MSVC_RUNTIME_LIBRARY "${_pkg_msvc_runtime_library}"
 # this scope too: subdirectories inherit it and read it when creating targets.
 set(CMAKE_MSVC_RUNTIME_LIBRARY "${_pkg_msvc_runtime_library}")
 
+# Disable PDB (debug symbol) files
+set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT "")
+
 if(MSVC)
-    add_compile_options(/MP)
+    add_compile_options(/MP /Zi- /Z7-)
 endif()
 
 # ---------------------------------------------------------------------------
