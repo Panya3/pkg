@@ -387,14 +387,19 @@ jobs:
         run: |
           set -euo pipefail
 
-          reference="$(ls -d columns/*/ | head -n1)"
-          for column in columns/*/; do
-            if ! diff -r --exclude=lib "${reference}" "${column}"; then
-              echo "${column} stages files that differ from ${reference}" >&2
-              exit 1
-            fi
-          done
-          echo "all $(ls -d columns/*/ | wc -l) columns share one include/ tree and one Install.bat"
+          count="$(ls -d columns/*/ | wc -l)"
+          if [ "$count" -gt 1 ]; then
+            reference="$(ls -d columns/*/ | head -n1)"
+            for column in columns/*/; do
+              if ! diff -r --exclude=lib "${reference}" "${column}"; then
+                echo "${column} stages files that differ from ${reference}" >&2
+                exit 1
+              fi
+            done
+            echo "all ${count} columns share one include/ tree and one Install.bat"
+          else
+            echo "single column run (${count}): skipping multi-column diff"
+          fi
 
           echo "--- columns to be published"
           find columns -name '*.lib' | sort
