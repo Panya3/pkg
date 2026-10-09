@@ -1,7 +1,7 @@
 // imgui consumer: the member's core and its backends, on a few frames with no window.
 //
 // The hub promises imgui like any other member — one include root, a library staged
-// per (arch, config), the static CRT — and this is the thinnest program that proves
+// per (arch, config), the dynamic CRT — and this is the thinnest program that proves
 // it: create a context, run frames, render them, and check that draw data came out.
 // It is built against the published artifact, never the hub's build tree, because
 // that is where a consumer meets the hub.

@@ -2,7 +2,7 @@
 //
 // Verifies:
 //   * Staged headers under bin/include/yara resolve (<yara.h>)
-//   * Staged static library links into /MT or /MTd C++ binary
+//   * Staged static library links into /MD or /MDd C++ binary
 //   * yr_initialize, yr_compiler_*, yr_rules_scan_mem, and yr_finalize work.
 
 #include <cassert>

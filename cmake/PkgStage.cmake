@@ -154,6 +154,11 @@ function(pkg_stage member)
         endif()
     endforeach()
 
+    # Clean up PDB files from staged directories
+    add_custom_command(TARGET pkg_stage_${member} POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E rm -f "${PKG_LIB_DIR}/${member}/${PKG_ARCH}/$<CONFIG>/*.pdb"
+    )
+
     # Append to the registry in the top-level scope we were included from.
     # Built with list(APPEND) so an initially empty list gains no empty element.
     set(_stages ${PKG_STAGE_TARGETS})

@@ -11,20 +11,20 @@
 #     actually resolves the include spelling the layout offers
 #   * every library member stages linkable .lib files under <arch>/<config>
 #   * the staged libraries link into an executable built with the same CRT
-#     (/MT, /MTd) — a mismatch fails here as LNK2038 instead of downstream
+#     (/MD, /MDd) — a mismatch fails here as LNK2038 instead of downstream
 #   * the libraries really work: compress/decompress, hash, parse, eval
 #
-#   cmake -S tests/consumer -B build/consumer -DPKG_CONFIG=Debug
-#   cmake --build build/consumer --config Debug
-#   ./build/consumer/Debug/consumer_c.exe
+#   cmake -S tests/consumer -B build/consumer -DPKG_CONFIG=Release
+#   cmake --build build/consumer --config Release
+#   ./build/consumer/Release/consumer_c.exe
 
 cmake_minimum_required(VERSION 3.25)
 
 project(pkg_consumer LANGUAGES C CXX)
 
 # What any consumer of this hub has to do as well: match its CRT. The hub ships
-# /MT (/MTd), so a consumer built /MD fails at link time on purpose.
-set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+# /MD (/MDd for Debug), so a consumer built /MT fails at link time on purpose.
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 20)
@@ -32,12 +32,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/$<CONFIG>")
 
 # Which staged config to consume. CI passes the config it just built; a local run
-# defaults to Debug.
+# defaults to Release.
 if(NOT PKG_CONFIG)
     if(CMAKE_BUILD_TYPE)
         set(PKG_CONFIG "${CMAKE_BUILD_TYPE}")
     else()
-        set(PKG_CONFIG Debug)
+        set(PKG_CONFIG Release)
     endif()
 endif()
 
