@@ -546,7 +546,7 @@ jobs:
           set "PKG_INCLUDE=%PKG_DIR%\include"
           set "INCLUDE=%PKG_INCLUDE%\zlib;%PKG_INCLUDE%\zstd;%PKG_INCLUDE%\lz4;%PKG_INCLUDE%\mbedtls;%PKG_INCLUDE%\quickjs;%PKG_INCLUDE%\stb;%INCLUDE%"
           set "LIBS="
-          for /d %%M in ("%PKG_DIR%\lib\*") do for %%F in ("%%~M\${{ matrix.arch }}\${{ matrix.config }}\*.lib") do call set "LIBS=%%LIBS%% "%%~F""
+          for /d %%M in ("%PKG_DIR%\lib\*") do if not "%%~nxM"=="frida" for %%F in ("%%~M\${{ matrix.arch }}\${{ matrix.config }}\*.lib") do call set "LIBS=%%LIBS%% "%%~F""
           if not defined LIBS (echo no staged libraries under PKG_DIR for ${{ matrix.arch }} ${{ matrix.config }} 1>&2 & exit /b 1)
 
           if not exist build mkdir build
@@ -667,7 +667,7 @@ jobs:
           rem Two steps, not style: cmd expands wildcards in the last path
           rem component only, so one glob with lib\* in the middle matches
           rem nothing. Walking the members also makes an empty member harmless.
-          for /d %%M in ("%PKG_DIR%\lib\*") do for /f "delims=" %%F in ('dir /s /b "%%~M\*.lib" 2^>nul') do call set "LIBS=%%LIBS%% "%%~F""
+          for /d %%M in ("%PKG_DIR%\lib\*") do if not "%%~nxM"=="frida" for /f "delims=" %%F in ('dir /s /b "%%~M\*.lib" 2^>nul') do call set "LIBS=%%LIBS%% "%%~F""
           if not defined LIBS (echo no staged libraries under PKG_DIR 1>&2 & exit /b 1)
 
           if not exist build mkdir build
