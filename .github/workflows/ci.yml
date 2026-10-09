@@ -39,8 +39,41 @@ permissions:
   contents: read
 
 jobs:
+  matrix:
+    name: resolve-matrix
+    runs-on: ubuntu-latest
+    outputs:
+      targets: ${{ steps.set-matrix.outputs.targets }}
+    steps:
+      - id: set-matrix
+        run: |
+          target="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.target || 'x64-release' }}"
+          case "$target" in
+            x64-release)
+              matrix='[{"arch":"x64","platform":"x64","configure":"ci-x64","build":"x64-Release","config":"Release","id":"x64-release"}]'
+              ;;
+            x64-debug)
+              matrix='[{"arch":"x64","platform":"x64","configure":"ci-x64","build":"x64-Debug","config":"Debug","id":"x64-debug"}]'
+              ;;
+            x86-release)
+              matrix='[{"arch":"x86","platform":"Win32","configure":"ci-x86","build":"x86-Release","config":"Release","id":"x86-release"}]'
+              ;;
+            x86-debug)
+              matrix='[{"arch":"x86","platform":"Win32","configure":"ci-x86","build":"x86-Debug","config":"Debug","id":"x86-debug"}]'
+              ;;
+            all)
+              matrix='[{"arch":"x64","platform":"x64","configure":"ci-x64","build":"x64-Release","config":"Release","id":"x64-release"},{"arch":"x64","platform":"x64","configure":"ci-x64","build":"x64-Debug","config":"Debug","id":"x64-debug"},{"arch":"x86","platform":"Win32","configure":"ci-x86","build":"x86-Release","config":"Release","id":"x86-release"},{"arch":"x86","platform":"Win32","configure":"ci-x86","build":"x86-Debug","config":"Debug","id":"x86-debug"}]'
+              ;;
+            *)
+              echo "Unknown target $target" >&2
+              exit 1
+              ;;
+          esac
+          echo "targets=$matrix" >> "$GITHUB_OUTPUT"
+
   hub:
     name: hub (${{ matrix.arch }} ${{ matrix.config }})
+    needs: matrix
     # Pinned image label, not windows-latest: the toolchain (VS 2022, CMake) is
     # part of the input here, so it must not move under us. It is also why both
     # architectures build on this one runner — windows-2022 is the pinned image and
@@ -48,38 +81,8 @@ jobs:
     runs-on: windows-2022
     strategy:
       fail-fast: false
-      # Written out rather than crossed automatically: the arch name used in the
-      # layout, the VS platform spelling and the preset names are three different
-      # words for the same thing, and this is the one place they are tied together.
       matrix:
-        include:
-          - arch: x64
-            platform: x64
-            configure: ci-x64
-            build: x64-Release
-            config: Release
-            id: x64-release
-          - arch: x64
-            platform: x64
-            configure: ci-x64
-            build: x64-Debug
-            config: Debug
-            id: x64-debug
-          - arch: x86
-            platform: Win32
-            configure: ci-x86
-            build: x86-Release
-            config: Release
-            id: x86-release
-          - arch: x86
-            platform: Win32
-            configure: ci-x86
-            build: x86-Debug
-            config: Debug
-            id: x86-debug
-    if: |
-      (github.event_name != 'workflow_dispatch' && matrix.id == 'x64-release') ||
-      (github.event_name == 'workflow_dispatch' && (github.event.inputs.target == 'all' || github.event.inputs.target == matrix.id))
+        include: ${{ fromJson(needs.matrix.outputs.targets) }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -416,31 +419,12 @@ jobs:
   # built by this hub's CMake reaches for.
   consume:
     name: consume (${{ matrix.arch }} ${{ matrix.config }})
-    needs: publish
+    needs: [matrix, publish]
     runs-on: windows-2022
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - arch: x64
-            platform: x64
-            config: Release
-            id: x64-release
-          - arch: x64
-            platform: x64
-            config: Debug
-            id: x64-debug
-          - arch: x86
-            platform: Win32
-            config: Release
-            id: x86-release
-          - arch: x86
-            platform: Win32
-            config: Debug
-            id: x86-debug
-    if: |
-      (github.event_name != 'workflow_dispatch' && matrix.id == 'x64-release') ||
-      (github.event_name == 'workflow_dispatch' && (github.event.inputs.target == 'all' || github.event.inputs.target == matrix.id))
+        include: ${{ fromJson(needs.matrix.outputs.targets) }}
     steps:
       - name: Checkout (source only — no submodules)
         uses: actions/checkout@v7
