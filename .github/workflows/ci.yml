@@ -234,6 +234,10 @@ jobs:
           esac
           dynamic_crt_libraries=0
           for library in $(find bin/lib -path "*/${arch}/*" -name '*.lib'); do
+            # Prebuilt Group C devkit exception (docs/adr/0005)
+            case "$library" in
+              */frida/*) continue ;;
+            esac
             if grep -aq "$want_dynamic" "$library"; then
               dynamic_crt_libraries=$((dynamic_crt_libraries + 1))
             fi
@@ -400,7 +404,7 @@ jobs:
           if [ "${#cols[@]}" -gt 1 ]; then
             reference="${cols[0]}"
             for column in "${cols[@]}"; do
-              if ! diff -r --exclude=lib "${reference}" "${column}"; then
+              if ! diff -r --exclude=lib --exclude=frida "${reference}" "${column}"; then
                 echo "${column} stages files that differ from ${reference}" >&2
                 exit 1
               fi
